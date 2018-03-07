@@ -1,0 +1,60 @@
+#ifndef _SENSOR_CALIBRATION_H_
+#define _SENSOR_CALIBRATION_H_
+
+#include <TimeLib.h>
+#include <Time.h>
+
+
+#define ANALOG_PIN A0
+#define DECOD_A0_PIN D6
+#define DECOD_A1_PIN D5
+#define DECOD_A2_PIN D0
+#define MUL_DECOD_INHIB_PIN D4
+#define MULA_PIN D1
+#define MULB_PIN D2
+#define MULC_PIN D3
+//#define NOWATER_SWITCH_PIN D7
+#define FLOWSIGNAL_PIN D7
+#define PUMP_PIN D8
+
+#define REFERENCE_RESISTOR 4700
+#define NUM_PROBES 11
+#define SIGNAL_DELAY 10
+#define MINAFTERVOLTAGE_OPENCIRCUIT 10
+
+#define AFTERVOLTAGE_OPEN -1
+#define SHORTCIRCUIT_SENSOR_MINDIFF 2 
+#define SENSOR_SHORTCIRCUIT -2
+#define MOISTURE_READERROR -3
+#define MOISTURE_MULX 593.288368205802
+#define MOISTURE_EXPFACT 1.30431394603425
+
+#define SENSOR_READ_DELAY 5000
+
+#define FS_LOG_KEEP_DAYS 30
+#define FS_LOG_WRITE_INTERVAL 300
+
+//#define DEBUG_SENSOR_MODE
+
+enum SensorInput {
+  SURFACE_LEFT,
+  SURFACE_RIGHT,
+  MIDDLE_LEFT,
+  MIDDLE_RIGHT,
+  DEEP_LEFT,
+  DEEP_RIGHT
+};
+
+enum SensorType {
+  SURFACE,
+  MIDDLE,
+  DEEP
+};
+
+enum SensorDirection {
+  LEFT,
+  RIGHT
+};
+
+
+#endif

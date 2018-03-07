@@ -1,0 +1,18 @@
+{
+  "noirrtimes": [
+     "0000", 
+     "0000",
+     "0000", 
+     "0000",
+     "0000", 
+     "0000",
+     "0000", 
+     "0000"
+  ],
+  "irrslot": 0,
+  "irrmaxtimeday": 0,
+  "irrminterv": 30,
+  "critlevel": 65.0,
+  "satlevel": 85.0,
+  "normpulses": 0
+}
