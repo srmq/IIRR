@@ -455,6 +455,33 @@ void SensorTask::loopSensorMode() {
   //moistures.hasWater = isWithWater();
   //FIXME
   //aqui verificar regra de irrigacao
+  const time_t nowTime = TimeKeeper::tkNow();
+  if (irrigData.isIrrigating) {
+    //is irrigating at this moment
+    const unsigned long irrigTimeSecs = nowTime - irrigData.irrigSince;
+    if (irrigTimeSecs > mainConfParams.irrSlotSeconds) {
+      stopIrrigationAndLog(); //FIXME adicionar enum Reason
+    } else if (moistures.surface >= mainConfParams.satLevel) {
+      stopIrrigationAndLog();
+    } else if (moistures.middle >= mainConfParams.satLevel) {
+      stopIrrigationAndLog();
+    } else if ((moistures.deep > irrigData.deepAtStartIrrig) && (moistures.deep > (irrigData.deepAtStartIrrig + 0.5*(mainConfParams.satLevel - irrigData.deepAtStartIrrig)))) {
+      stopIrrigationAndLog(); //FIXME 1.2 should be conf parameter
+    }
+  } else {
+    //is not irrigating at this moment
+    if ( !(TimeKeeper::isValidTS(nowTime) && isInNoIrrigTime(nowTime)) &&
+         (irrigTodayRemainingSecs() >= 0.2*mainConfParams.irrSlotSeconds) && //FIXME 0.2 should be conf parameter
+         fulfillMinIrrigInterval(nowTime) && 
+         (this->waterControl.currStatus() != WATER_CURREMPTY) &&
+         (moistures.surface <= mainConfParams.critLevel || moistures.middle <= mainConfParams.critLevel) &&
+         (moistures.deep < mainConfParams.satLevel && moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel)
+        ) 
+      { //fulffil irrigation criteria, turn on irrigation
+        //FIXME TODO
+        
+      }
+  }
   
   moistures.timeStamp = this->timeKeeper.tkNow();
   char tsStr[16];
@@ -757,7 +784,7 @@ void SensorTask::loop()  {
           logFile.flush();
           logFile.close();
         }
-        
+        stopIrrigationAndLog();
       }
       //LIGAR O RESULTADO DE SE TEM AGUA NO MULTIPLEXADOR DE ENTRADA E LIBERAR O PINO
       //QUE ESTA SENDO USADO PARA LIGAR A BOMBA
