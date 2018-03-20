@@ -460,13 +460,15 @@ void SensorTask::loopSensorMode() {
     //is irrigating at this moment
     const unsigned long irrigTimeSecs = nowTime - irrigData.irrigSince;
     if (irrigTimeSecs > mainConfParams.irrSlotSeconds) {
-      stopIrrigationAndLog(); //FIXME adicionar enum Reason
+      stopIrrigationAndLog(nowTime, STOPIRRIG_SLOTEND); 
     } else if (moistures.surface >= mainConfParams.satLevel) {
-      stopIrrigationAndLog();
+      stopIrrigationAndLog(nowTime, STOPIRRIG_SURFACESAT);
     } else if (moistures.middle >= mainConfParams.satLevel) {
-      stopIrrigationAndLog();
+      stopIrrigationAndLog(nowTime, STOPIRRIG_MIDDLESAT);
     } else if ((moistures.deep > irrigData.deepAtStartIrrig) && (moistures.deep > (irrigData.deepAtStartIrrig + 0.5*(mainConfParams.satLevel - irrigData.deepAtStartIrrig)))) {
-      stopIrrigationAndLog(); //FIXME 1.2 should be conf parameter
+      stopIrrigationAndLog(nowTime, STOPIRRIG_DEEPINCREASE); //FIXME 1.2 should be conf parameter
+    } else if (irrigTimeSecs + irrigData.irrigTodaySecs > mainConfParams.irrMaxTimeDaySeconds) {
+      stopIrrigationAndLog(nowTime, STOPIRRIG_MAXTIMEDAY);
     }
   } else {
     //is not irrigating at this moment
@@ -784,7 +786,7 @@ void SensorTask::loop()  {
           logFile.flush();
           logFile.close();
         }
-        stopIrrigationAndLog();
+        stopIrrigationAndLog(timeStamp, STOPIRRIG_WATEREMPTY);
       }
       //LIGAR O RESULTADO DE SE TEM AGUA NO MULTIPLEXADOR DE ENTRADA E LIBERAR O PINO
       //QUE ESTA SENDO USADO PARA LIGAR A BOMBA
@@ -870,5 +872,57 @@ AsyncLearnFlowStatus SensorTask::getLastLearnFlowStatus() {
 
 void SensorTask::resetLearnFlowStatus() {
   learnFlowStatus = LFLOW_NOTREQUESTED;
+}
+
+bool SensorTask::stopIrrigationAndLog(time_t aTime, StopIrrigReason reason) {
+  const unsigned long irrigTimeSecs = aTime - irrigData.irrigSince;
+  irrigData.lastIrrigEnd = aTime;
+  irrigData.irrigTodaySecs += irrigTimeSecs;
+  irrigData.isIrrigating = false;
+
+  char tsStr[16];
+  snprintf_P(tsStr, 16, TS_FMT_STR, this->timeKeeper.tkYear(aTime), this->timeKeeper.tkMonth(aTime), this->timeKeeper.tkDay(aTime), this->timeKeeper.tkHour(aTime), this->timeKeeper.tkMinute(aTime), this->timeKeeper.tkSecond(aTime));
+
+  const bool updateFSResult = updateFSIrrigData(irrigData);
+  
+  { //write to messages
+    File logFile = getCurrMsgFile(aTime);
+    if (logFile) {
+      logFile.print(tsStr);
+      logFile.print(',');
+      logFile.print(updateFSResult ? MSG_INFO : MSG_WARN);
+      logFile.print(',');
+      logFile.print(MSG_STOPPED_IRRIG);
+      logFile.print(',');
+      logFile.print(reason); 
+      logFile.print(',');
+      logFile.println(updateFSResult ? 1 : 0); 
+      logFile.flush();
+      logFile.close();
+    }
+  }
+
+  this->waterControl.stopWater();
+
+  { //write moistures to log
+    File logFile = getCurrLogFile(aTime);
+    if (logFile) {
+      logFile.print(tsStr);
+      logFile.print(',');
+      logFile.print(moistures.surface);
+      logFile.print(',');
+      logFile.print(moistures.middle);
+      logFile.print(',');
+      logFile.print(moistures.deep);
+      logFile.print(',');
+      logFile.println('0');
+      logFile.flush();
+      logFile.close();
+      lastLogWrite = aTime;
+    }
+  }
+  
+  
+  return updateFSResult;
 }
 

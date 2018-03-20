@@ -26,6 +26,15 @@
 #include "ConfParams.h"
 #include "WaterController.h"
 
+enum StopIrrigReason {
+  STOPIRRIG_SLOTEND,
+  STOPIRRIG_SURFACESAT,
+  STOPIRRIG_MIDDLESAT,
+  STOPIRRIG_DEEPINCREASE,
+  STOPIRRIG_MAXTIMEDAY,
+  STOPIRRIG_WATEREMPTY
+};
+
 enum MessageTypes {
   MSG_DEBUG,
   MSG_INFO,
@@ -34,9 +43,10 @@ enum MessageTypes {
 };
 
 enum MessageCodes {
-  MSG_INCONSIST_WATER_CURRSTATUS //this means that we were expecting a certain water 
+  MSG_INCONSIST_WATER_CURRSTATUS, //this means that we were expecting a certain water 
                                  // current status, but another was found. First it
                                  // is logged the status found and after the one expected
+  MSG_STOPPED_IRRIG // this means that we stopped irrigating. It may be just informational.
 };
 
 enum AsyncLearnFlowStatus {
@@ -95,6 +105,8 @@ private:
   WellPumpWaterController waterControl;
 
   inline static bool isValidMoisture(float percent) { return (percent >= 0) && (percent <= 100); }
+
+  bool stopIrrigationAndLog(time_t aTime, enum StopIrrigReason);
 
 protected:
     void loop();
