@@ -25,6 +25,7 @@
 #include <ArduinoJson.h>
 #include "ConfParams.h"
 #include "WaterController.h"
+#include "global_funcs.h"
 
 enum StopIrrigReason {
   STOPIRRIG_SLOTEND,
@@ -46,7 +47,8 @@ enum MessageCodes {
   MSG_INCONSIST_WATER_CURRSTATUS, //this means that we were expecting a certain water 
                                  // current status, but another was found. First it
                                  // is logged the status found and after the one expected
-  MSG_STOPPED_IRRIG // this means that we stopped irrigating. It may be just informational.
+  MSG_STOPPED_IRRIG, // this means that we stopped irrigating. It may be just informational.
+  MSG_STARTED_IRRIG 
 };
 
 enum AsyncLearnFlowStatus {
@@ -107,6 +109,7 @@ private:
   inline static bool isValidMoisture(float percent) { return (percent >= 0) && (percent <= 100); }
 
   bool stopIrrigationAndLog(time_t aTime, enum StopIrrigReason);
+  bool startIrrigationAndLog(time_t aTime, const SoilMoisture& moist);
 
 protected:
     void loop();

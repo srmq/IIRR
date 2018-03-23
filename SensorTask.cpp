@@ -451,7 +451,8 @@ void SensorTask::loopSensorMode() {
   moistures.surface = moistureSurface;
   moistures.middle = moistureMiddle;
   moistures.deep = moistureDeep;
-  
+
+  moistures.timeStamp = this->timeKeeper.tkNow();
   //moistures.hasWater = isWithWater();
   //FIXME
   //aqui verificar regra de irrigacao
@@ -466,26 +467,26 @@ void SensorTask::loopSensorMode() {
     } else if (moistures.middle >= mainConfParams.satLevel) {
       stopIrrigationAndLog(nowTime, STOPIRRIG_MIDDLESAT);
     } else if ((moistures.deep > irrigData.deepAtStartIrrig) && (moistures.deep > (irrigData.deepAtStartIrrig + 0.5*(mainConfParams.satLevel - irrigData.deepAtStartIrrig)))) {
-      stopIrrigationAndLog(nowTime, STOPIRRIG_DEEPINCREASE); //FIXME 1.2 should be conf parameter
+      stopIrrigationAndLog(nowTime, STOPIRRIG_DEEPINCREASE); //FIXME 0.5 should be conf parameter
     } else if (irrigTimeSecs + irrigData.irrigTodaySecs > mainConfParams.irrMaxTimeDaySeconds) {
       stopIrrigationAndLog(nowTime, STOPIRRIG_MAXTIMEDAY);
     }
   } else {
     //is not irrigating at this moment
+    const WaterCurrSensorStatus currWaterStatus = this->waterControl.currStatus();
     if ( !(TimeKeeper::isValidTS(nowTime) && isInNoIrrigTime(nowTime)) &&
          (irrigTodayRemainingSecs() >= 0.2*mainConfParams.irrSlotSeconds) && //FIXME 0.2 should be conf parameter
          fulfillMinIrrigInterval(nowTime) && 
-         (this->waterControl.currStatus() != WATER_CURREMPTY) &&
+         (currWaterStatus != WATER_CURREMPTY) &&
+         (currWaterStatus != WATER_CURRNOCONF) &&
          (moistures.surface <= mainConfParams.critLevel || moistures.middle <= mainConfParams.critLevel) &&
          (moistures.deep < mainConfParams.satLevel && moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel)
         ) 
       { //fulffil irrigation criteria, turn on irrigation
-        //FIXME TODO
-        
+        startIrrigationAndLog(nowTime, moistures);
       }
   }
   
-  moistures.timeStamp = this->timeKeeper.tkNow();
   char tsStr[16];
   snprintf_P(tsStr, 16, TS_FMT_STR, this->timeKeeper.tkYear(moistures.timeStamp), this->timeKeeper.tkMonth(moistures.timeStamp), this->timeKeeper.tkDay(moistures.timeStamp), this->timeKeeper.tkHour(moistures.timeStamp), this->timeKeeper.tkMinute(moistures.timeStamp), this->timeKeeper.tkSecond(moistures.timeStamp));
 
@@ -872,6 +873,59 @@ AsyncLearnFlowStatus SensorTask::getLastLearnFlowStatus() {
 
 void SensorTask::resetLearnFlowStatus() {
   learnFlowStatus = LFLOW_NOTREQUESTED;
+}
+
+bool SensorTask::startIrrigationAndLog(time_t aTime, const SoilMoisture& moist) {
+    const WaterStartStatus startResult = this->waterControl.startWater();
+    MessageTypes msgType;
+    if (startResult == WATER_STARTOK) {
+      irrigData.surfaceAtStartIrrig = moist.surface;
+      irrigData.middleAtStartIrrig = moist.middle;
+      irrigData.deepAtStartIrrig = moist.deep;
+      irrigData.isIrrigating = true;
+      irrigData.irrigSince = aTime;
+      msgType = MSG_INFO;
+    } else {
+      msgType = MSG_WARN;
+    }
+
+  char tsStr[16];
+  snprintf_P(tsStr, 16, TS_FMT_STR, this->timeKeeper.tkYear(aTime), this->timeKeeper.tkMonth(aTime), this->timeKeeper.tkDay(aTime), this->timeKeeper.tkHour(aTime), this->timeKeeper.tkMinute(aTime), this->timeKeeper.tkSecond(aTime));
+
+  { //write to messages
+    File logFile = getCurrMsgFile(aTime);
+    if (logFile) {
+      logFile.print(tsStr);
+      logFile.print(',');
+      logFile.print(msgType);
+      logFile.print(',');
+      logFile.print(MSG_STARTED_IRRIG);
+      logFile.print(',');
+      logFile.print(WATER_STARTOK); 
+      logFile.print(',');
+      logFile.println(startResult); 
+      logFile.flush();
+      logFile.close();
+    }
+  }
+
+  { //write moistures to log
+    File logFile = getCurrLogFile(aTime);
+    if (logFile) {
+      logFile.print(tsStr);
+      logFile.print(',');
+      logFile.print(moist.surface);
+      logFile.print(',');
+      logFile.print(moist.middle);
+      logFile.print(',');
+      logFile.print(moist.deep);
+      logFile.print(',');
+      logFile.println(irrigData.isIrrigating ? '1' : '0');
+      logFile.flush();
+      logFile.close();
+      lastLogWrite = aTime;
+    }
+  }
 }
 
 bool SensorTask::stopIrrigationAndLog(time_t aTime, StopIrrigReason reason) {
