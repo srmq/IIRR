@@ -56,6 +56,10 @@ static const char JSON_F_MAINCONFPARAMS[] PROGMEM = "/v100/getMainConfParams";
 static const char JSON_F_UPDATEMAINCONFPARAMS[] PROGMEM = "/v100/updateMainConfParams";
 static const char JSON_F_GETLOGDIRCONTENTS[] PROGMEM = "/v100/getLogDirContents";
 static const char JSON_F_GETCSVFILE[] PROGMEM = "/v100/getCSVFile";
+static const char JSON_F_GETSOILMOISTURE[] PROGMEM = "/v100/getSoilMoisture";
+static const char JSON_F_GETIRRIGDATA[] PROGMEM = "/v100/getIrrigData";
+static const char JSON_F_GETMYUTCTIME[] PROGMEM = "/v100/getMyUTCTime";
+static const char JSON_F_UPDATEUTCTIME[] PROGMEM = "/v100/updateMyUTCTime";
 static const char HTTP_MIME_CSV[] PROGMEM = "text/csv";
 
 void streamCSV(Stream &csvStream, size_t contentLength = CONTENT_LENGTH_UNKNOWN) {
@@ -116,6 +120,58 @@ void ServerTask::handleRoot(ServerTask *taskServer) {
     String htmlMime = String(FPSTR(WWW_MIME_TEXTHTML));
     String rootMsg = String(FPSTR(WWW_ROOT_CONNECTION_MSG));
 	  return server.send(HTTP_OK, htmlMime.c_str(), rootMsg.c_str());
+}
+
+void ServerTask::handleGetMyUTCTime(ServerTask *taskServer) {
+  const size_t bufferSize = JSON_OBJECT_SIZE(6);
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+  
+  JsonObject& root = jsonBuffer.createObject();
+  time_t nowTime = TimeKeeper::tkNow();
+  tmElements_t timeStruct;
+  TimeKeeper::tkBreakTime(nowTime, timeStruct);
+  root["year"] = timeStruct.Year + 1970;
+  root["month"] = timeStruct.Month;
+  root["day"] = timeStruct.Day;
+  root["hour"] = timeStruct.Hour;
+  root["min"] = timeStruct.Minute;
+  root["sec"] = timeStruct.Second;
+  String jsonStr;
+  root.printTo(jsonStr);
+  String jsonMime = String(FPSTR(WWW_MIME_JSON));
+  return server.send(HTTP_OK, jsonMime.c_str(), jsonStr);
+}
+
+void ServerTask::handleGetIrrigData(ServerTask *taskServer) {
+  const size_t bufferSize = JSON_OBJECT_SIZE(7);
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+  
+  JsonObject& root = jsonBuffer.createObject();
+  root["surfacestirr"] = irrigData.surfaceAtStartIrrig;
+  root["middlestirr"] = irrigData.middleAtStartIrrig;
+  root["deepstirr"] = irrigData.deepAtStartIrrig;
+  root["isirrig"] = irrigData.isIrrigating ? 1 : 0;
+  root["irrigsince"] = irrigData.irrigSince;
+  root["lstirrigend"] = irrigData.lastIrrigEnd;
+  root["irrigtdaysecs"] = irrigData.irrigTodaySecs;  
+  String jsonStr;
+  root.printTo(jsonStr);
+  String jsonMime = String(FPSTR(WWW_MIME_JSON));
+  return server.send(HTTP_OK, jsonMime.c_str(), jsonStr);
+}
+
+void ServerTask::handleGetSoilMoisture(ServerTask *taskServer) {
+  const size_t bufferSize = JSON_OBJECT_SIZE(4);
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+  JsonObject& root = jsonBuffer.createObject();
+  root["surface"] = moistures.surface;
+  root["middle"] = moistures.middle;
+  root["deep"] = moistures.deep;
+  root["ts"] = moistures.timeStamp;
+  String jsonStr;
+  root.printTo(jsonStr);
+  String jsonMime = String(FPSTR(WWW_MIME_JSON));
+  return server.send(HTTP_OK, jsonMime.c_str(), jsonStr);
 }
 
 void ServerTask::handleGetMainConfParams(ServerTask *taskServer) {
@@ -205,6 +261,30 @@ void ServerTask::sendJsonWithStatusOnly(ServerTaskStatusCodes taskStatusCode, HT
     Serial.println(jsonStr);
     String jsonMime = String(FPSTR(WWW_MIME_JSON));
     return server.send(httpStatus, jsonMime.c_str(), jsonStr);  
+}
+
+void ServerTask::updateUTCTime(ServerTask *taskServer) {
+  const size_t bufferSize = JSON_OBJECT_SIZE(6) + 60;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+  JsonObject& root = jsonBuffer.parseObject(server.arg("plain"));
+  int aYear = root["year"]; 
+  int aMonth = root["month"];
+  int aDay = root["day"]; 
+  int aHour = root["hour"];
+  int aMin = root["min"];
+  int aSec = root["sec"];
+  if ((aYear > 2016) && 
+      (aMonth > 0) && (aMonth < 13) && 
+      (aDay > 0) && (aDay < 32) && 
+      (aHour >= 0) && (aHour < 24) && 
+      (aMin >= 0) && (aMin < 60) &&
+      (aSec >= 0) && (aSec < 60)) {
+
+    TimeKeeper::tkSetTime(aYear, aMonth, aDay, aHour, aMin, aSec);
+    return sendJsonWithStatusOnly(SERVERTASK_OK, HTTP_OK);      
+  } else {
+    return sendJsonWithStatusOnly(SERVERTASK_HANDLE_UPDATEUTCTIME_INVALIDPARAMS, HTTP_BAD_REQUEST);
+  }
 }
 
 void ServerTask::handleUpdateMainConfParams(ServerTask *taskServer) {
@@ -430,6 +510,19 @@ ServerTask::ServerTask() : Task() {
   static ESP8266WebServer::THandlerFunction myHandleResetWaterFStatus = std::bind(ServerTask::authenticateAndExecute, this, ServerTask::handleResetWaterFStatus);
   server.on(String(FPSTR(JSON_F_RESETWATERFSTATUS)), HTTP_POST, myHandleResetWaterFStatus);
   
+
+  static ESP8266WebServer::THandlerFunction myHandleGetSoilMoisture = std::bind(ServerTask::authenticateAndExecute, this, ServerTask::handleGetSoilMoisture);
+  server.on(String(FPSTR(JSON_F_GETSOILMOISTURE)), HTTP_GET, myHandleGetSoilMoisture);
+
+  static ESP8266WebServer::THandlerFunction myHandleGetIrrigData = std::bind(ServerTask::authenticateAndExecute, this, ServerTask::handleGetIrrigData);
+  server.on(String(FPSTR(JSON_F_GETIRRIGDATA)), HTTP_GET, myHandleGetIrrigData);
+
+
+  static ESP8266WebServer::THandlerFunction myHandleGetMyUTCTime = std::bind(ServerTask::authenticateAndExecute, this, ServerTask::handleGetMyUTCTime);
+  server.on(String(FPSTR(JSON_F_GETMYUTCTIME)), HTTP_GET, myHandleGetMyUTCTime);
+
+  static ESP8266WebServer::THandlerFunction myHandleUpdateUTCTime = std::bind(ServerTask::authenticateAndExecute, this, ServerTask::updateUTCTime);
+  server.on(String(FPSTR(JSON_F_UPDATEUTCTIME)), HTTP_POST, myHandleUpdateUTCTime);
 
 
   server.begin();

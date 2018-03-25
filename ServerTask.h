@@ -53,7 +53,8 @@ enum ServerTaskStatusCodes {
   SERVERTASK_HANDLE_GETLOGDIRCONTENTS_FSNOTOPEN = -12,
   SERVERTASK_HANDLE_GETCSVFILE_FSNOTOPEN = -13,
   SERVERTASK_HANDLE_GETCSVFILE_NOPARAM_FILE = -14,
-  SERVERTASK_HANDLE_GETCSVFILE_FILENOTFOUND = -15
+  SERVERTASK_HANDLE_GETCSVFILE_FILENOTFOUND = -15,
+  SERVERTASK_HANDLE_UPDATEUTCTIME_INVALIDPARAMS = -16
 };
 
 enum HTTPStatus {
@@ -82,6 +83,10 @@ private:
   static void handleLearnWaterFlow(ServerTask *taskServer);
   static void handleLearnWaterFStatus(ServerTask *taskServer);
   static void handleResetWaterFStatus(ServerTask *taskServer);
+  static void handleGetSoilMoisture(ServerTask *taskServer);
+  static void handleGetIrrigData(ServerTask *taskServer);
+  static void handleGetMyUTCTime(ServerTask *taskServer);
+  static void updateUTCTime(ServerTask *taskServer);
   
   static void sendJsonWithStatusOnly(ServerTaskStatusCodes taskStatusCode, HTTPStatus httpStatus);
   

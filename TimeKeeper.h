@@ -95,6 +95,14 @@ public:
     return makeTime(tm);
   }
 
+  static inline void tkBreakTime(time_t aTime, tmElements_t& outTm) {
+    breakTime(aTime, outTm);
+  }
+
+  static inline void tkSetTime(int aYear, int aMonth, int aDay, int aHour, int aMin, int aSec) {
+    setTime(aHour, aMin, aSec, aDay, aMonth, aYear);
+  }
+
   static inline unsigned long tkElapsedDays(time_t from, time_t to) {
     return elapsedDays(to-from);
   }
