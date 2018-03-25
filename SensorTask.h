@@ -90,9 +90,9 @@ private:
 
   ConfParams *readMainConfParams();
 
-  static time_t confParamTime2Timet(const char* timeStr);
-
   static time_t toConfTimet(time_t aTime_t);
+
+  static time_t confParamTime2Timet(const char* timeStr);
 
   static bool isInNoIrrigTime(time_t aTime);
 

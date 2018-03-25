@@ -54,6 +54,7 @@ public:
       normalPulsesPerSec(0) { }
 
    inline bool isEmptyInterval(time_t initialTime, time_t endTime) {
+
      return (initialTime == 0) && (endTime == 0);
    }
    inline bool isValidOrEmptyInterval(time_t initialTime, time_t endTime) {

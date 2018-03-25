@@ -60,8 +60,13 @@ void sortResistances() {
 time_t SensorTask::toConfTimet(time_t aTime_t) {
   char timeStr[5];
   timeStr[4] = '\0';
-  
-  snprintf_P(timeStr, 5, TS_FMT_HHMM, TimeKeeper::tkHour(aTime_t), TimeKeeper::tkMinute(aTime_t));
+
+  if (aTime_t > 0) {
+    snprintf_P(timeStr, 5, TS_FMT_HHMM, TimeKeeper::tkHour(aTime_t), TimeKeeper::tkMinute(aTime_t));    
+  } else {
+    return 0;
+  }
+
   return confParamTime2Timet(timeStr);
   
 }
@@ -166,26 +171,62 @@ JsonObject& SensorTask::createJsonFromConfParams(DynamicJsonBuffer& jsonBuffer) 
   JsonArray& noirrtimes = root.createNestedArray("noirrtimes");
   char strBuf[5];
   strBuf[4] = '\0';
-  
-  snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime0Init), TimeKeeper::tkMinute(mainConfParams.noIrrTime0Init));
-  noirrtimes.add(strBuf);
-  snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime0End), TimeKeeper::tkMinute(mainConfParams.noIrrTime0End));
-  noirrtimes.add(strBuf);
 
-  snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime1Init), TimeKeeper::tkMinute(mainConfParams.noIrrTime1Init));
-  noirrtimes.add(strBuf);
-  snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime1End), TimeKeeper::tkMinute(mainConfParams.noIrrTime1End));
-  noirrtimes.add(strBuf);
-  
-  snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime2Init), TimeKeeper::tkMinute(mainConfParams.noIrrTime2Init));
-  noirrtimes.add(strBuf);
-  snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime2End), TimeKeeper::tkMinute(mainConfParams.noIrrTime2End));
-  noirrtimes.add(strBuf);
-  
-  snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime3Init), TimeKeeper::tkMinute(mainConfParams.noIrrTime3Init));
-  noirrtimes.add(strBuf);
-  snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime3End), TimeKeeper::tkMinute(mainConfParams.noIrrTime3End));
-  noirrtimes.add(strBuf);
+  if (mainConfParams.noIrrTime0Init == 0) {
+    noirrtimes.add(String('0'));
+  } else {
+    snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime0Init), TimeKeeper::tkMinute(mainConfParams.noIrrTime0Init));
+    noirrtimes.add(String(strBuf));
+  }
+
+  if (mainConfParams.noIrrTime0End == 0) {
+    noirrtimes.add(String('0'));
+  } else {
+    snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime0End), TimeKeeper::tkMinute(mainConfParams.noIrrTime0End));
+    noirrtimes.add(String(strBuf));
+  }
+
+  if (mainConfParams.noIrrTime1Init == 0) {
+    noirrtimes.add(String('0'));
+  } else {
+    snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime1Init), TimeKeeper::tkMinute(mainConfParams.noIrrTime1Init));
+    noirrtimes.add(String(strBuf));
+  }
+
+  if (mainConfParams.noIrrTime1End == 0) {
+    noirrtimes.add(String('0'));    
+  } else {
+    snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime1End), TimeKeeper::tkMinute(mainConfParams.noIrrTime1End));
+    noirrtimes.add(String(strBuf));
+  }
+
+  if (mainConfParams.noIrrTime2Init == 0) {
+    noirrtimes.add(String('0'));    
+  } else {
+    snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime2Init), TimeKeeper::tkMinute(mainConfParams.noIrrTime2Init));
+    noirrtimes.add(String(strBuf));
+  }
+
+  if (mainConfParams.noIrrTime2End == 0) {
+    noirrtimes.add(String('0'));    
+  } else {
+    snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime2End), TimeKeeper::tkMinute(mainConfParams.noIrrTime2End));
+    noirrtimes.add(String(strBuf));
+  }
+
+  if (mainConfParams.noIrrTime3Init == 0) {
+    noirrtimes.add(String('0'));    
+  } else {
+    snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime3Init), TimeKeeper::tkMinute(mainConfParams.noIrrTime3Init));
+    noirrtimes.add(String(strBuf));
+  }
+
+  if (mainConfParams.noIrrTime3End == 0) {
+    noirrtimes.add(String('0'));    
+  } else {
+    snprintf_P(strBuf, 5, TS_FMT_HHMM, TimeKeeper::tkHour(mainConfParams.noIrrTime3End), TimeKeeper::tkMinute(mainConfParams.noIrrTime3End));
+    noirrtimes.add(String(strBuf));
+  }
 
   root["irrslot"] = mainConfParams.irrSlotSeconds;
   root["irrmaxtimeday"] = mainConfParams.irrMaxTimeDaySeconds;
@@ -221,6 +262,7 @@ void SensorTask::updateConfParamsFromJson(ConfParams& confStruct, JsonObject& js
   JsonArray& noirrtimes = jsonConfParamsRoot["noirrtimes"];
   confStruct.noIrrTime0Init = confParamTime2Timet(noirrtimes[0]);
   confStruct.noIrrTime0End = confParamTime2Timet(noirrtimes[1]);
+  
 
   confStruct.noIrrTime1Init = confParamTime2Timet(noirrtimes[2]);
   confStruct.noIrrTime1End = confParamTime2Timet(noirrtimes[3]);
