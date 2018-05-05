@@ -89,6 +89,7 @@ bool WellPumpWaterController::configureFlow() {
   }
   delayHandler(5000);
   this->turnOnSensor();
+  delayHandler(1000);
   avgSensorPulsesPerSec();
   avgPulsesSec = 0.5*avgSensorPulsesPerSec();
   avgPulsesSec += 0.5*avgSensorPulsesPerSec(); //we call three times, ignoring the first and taking the avg of the last two.

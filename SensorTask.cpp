@@ -551,11 +551,11 @@ void SensorTask::loopSensorMode() {
   }  
 
   /*
-  if(moistures.hasWater) {
+  if(isWithWater()) { //was: moistures.hasWater
     Serial.println("Habemus agua! :-D");
   } else {
     Serial.println("No water! :-(");
-  } FIXME
+  } //FIXME
   */
 
   Serial.println("");
@@ -622,13 +622,14 @@ bool SensorTask::isWithWater() {
   enableMulAndDecod();
   for (int i = 0; i < NUM_PROBES; i++) {
     this->delay(SIGNAL_DELAY);
-    const int levelRead = digitalRead(NOWATER_SWITCH_PIN);
+    const int levelRead = digitalRead(D7); //was: NOWATER_SWITCH_PIN
     if (levelRead == HIGH) {
       votes++;
     } else {
       votes--;
     }
   }
+  delay(5000);
   disableMulAndDecod();
   return (votes > 0);
 }
