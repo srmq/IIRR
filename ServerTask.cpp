@@ -449,7 +449,17 @@ ServerTask::ServerTask() : Task() {
   Serial.println(ssId);
   Serial.print(F("Default Pass: "));
   Serial.println(pass);
+
+  WiFi.softAP(ssId, pass);
+  IPAddress myIP = WiFi.softAPIP();
+  Serial.print(F("Own AP IP address: "));
+  Serial.println(myIP);
+  
+  WiFi.enableAP(true);
   /*
+  if (WiFi.wifi_get_opmode() != WIFI_AP_STA) {
+    WiFi.mode(WIFI_AP);
+  }
   int i;
   for (i = 0; i < 10; ++i) {
     if (WiFi.status() != WL_CONNECTED) {
@@ -459,17 +469,16 @@ ServerTask::ServerTask() : Task() {
     }
   }
   if (i == 10) {
-    Serial.println(F("INFO: Wifi not connected"));
+    Serial.println(F("INFO: Wifi not connected to 3rd party AP"));
+    WiFi.mode(WIFI_AP);
   } else {
-    Serial.print(F("INFO: Wifi connected, IP addr "));
+    WiFi.mode(WIFI_AP_STA);
+    Serial.print(F("INFO: Wifi connected to 3rd party AP, my IP addr "));
     Serial.println(WiFi.localIP());
+    
   }
   */
-  WiFi.softAP(ssId, pass);
-  IPAddress myIP = WiFi.softAPIP();
-  Serial.print(F("AP IP address: "));
-  Serial.println(myIP);
-  WiFi.mode(WIFI_AP_STA);
+
   
   static ESP8266WebServer::THandlerFunction myHandleRoot = std::bind(ServerTask::authenticateAndExecute, this, ServerTask::handleRoot);
   server.on("/", myHandleRoot);
