@@ -102,6 +102,7 @@ int ServerTask::getAdminPassword(char outPassword[], int maxLen) {
 }
 
 void ServerTask::authenticateAndExecute(ServerTask *taskServer, std::function<void (ServerTask *srvP)> funcToCall) {
+  Serial.println(F("HTTP server got call"));
   char www_password[13];
   taskServer->getAdminPassword(www_password, 13);
   String admUserName = String(FPSTR(WWW_DEFAULT_USERNAME));
@@ -454,7 +455,7 @@ ServerTask::ServerTask() : Task() {
   IPAddress myIP = WiFi.softAPIP();
   Serial.print(F("Own AP IP address: "));
   Serial.println(myIP);
-  
+  WiFi.mode(WIFI_AP); //FIXME assim nao esta conectando com a internet
   WiFi.enableAP(true);
   /*
   if (WiFi.wifi_get_opmode() != WIFI_AP_STA) {

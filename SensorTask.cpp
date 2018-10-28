@@ -510,12 +510,19 @@ void SensorTask::loopSensorMode() {
       stopIrrigationAndLog(nowTime, STOPIRRIG_MIDDLESAT);
     } else if ((moistures.deep > irrigData.deepAtStartIrrig) && (moistures.deep > (irrigData.deepAtStartIrrig + 0.5*(mainConfParams.satLevel - irrigData.deepAtStartIrrig)))) {
       stopIrrigationAndLog(nowTime, STOPIRRIG_DEEPINCREASE); //FIXME 0.5 should be conf parameter
-    } else if (irrigTimeSecs + irrigData.irrigTodaySecs > mainConfParams.irrMaxTimeDaySeconds) {
+    } else if (irrigTodayRemainingSecs() == 0) {
       stopIrrigationAndLog(nowTime, STOPIRRIG_MAXTIMEDAY);
     }
   } else {
     //is not irrigating at this moment
-    const WaterCurrSensorStatus currWaterStatus = this->waterControl.currStatus();
+    const WaterCurrSensorStatus  currWaterStatus = this->waterControl.currStatus();
+    if (currWaterStatus != WATER_CURREMPTY) Serial.println("OK currWaterStatus != WATER_CURREMPTY"); else Serial.println("ERR currWaterStatus = WATER_CURREMPTY");
+    if (currWaterStatus != WATER_CURRNOCONF) Serial.println("OK currWaterStatus != WATER_CURRNOCONF"); else Serial.println("ERR currWaterStatus = WATER_CURRNOCONF");
+    if (!(TimeKeeper::isValidTS(nowTime) && isInNoIrrigTime(nowTime))) Serial.println("OK nowTime TS"); else Serial.println("ERR nowTime TS");
+    if (irrigTodayRemainingSecs() >= 0.2*mainConfParams.irrSlotSeconds) Serial.println("OK irrigTodayRemainingSecs"); else Serial.println("ERR irrigTodayRemainingSecs");
+    if (fulfillMinIrrigInterval(nowTime)) Serial.println("OK nowTime fulfillMinIrrigationInterval"); else Serial.println("ERR fulfillMinIrrigationInterval");
+    if (moistures.surface <= mainConfParams.critLevel || moistures.middle <= mainConfParams.critLevel) Serial.println("OK surface or Middle <= Crit"); else Serial.println("ERR surface or Middle <= Crit");
+    if (moistures.deep < mainConfParams.satLevel && moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel) Serial.println("OK moistures < satLevel"); else Serial.println("ERR moistures < satLevel");
     if ( !(TimeKeeper::isValidTS(nowTime) && isInNoIrrigTime(nowTime)) &&
          (irrigTodayRemainingSecs() >= 0.2*mainConfParams.irrSlotSeconds) && //FIXME 0.2 should be conf parameter
          fulfillMinIrrigInterval(nowTime) && 
@@ -525,6 +532,7 @@ void SensorTask::loopSensorMode() {
          (moistures.deep < mainConfParams.satLevel && moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel)
         ) 
       { //fulffil irrigation criteria, turn on irrigation
+        Serial.println("I'm starting IRRIGATION");
         startIrrigationAndLog(nowTime, moistures);
       }
   }
@@ -973,8 +981,13 @@ bool SensorTask::startIrrigationAndLog(time_t aTime, const SoilMoisture& moist) 
 
 bool SensorTask::stopIrrigationAndLog(time_t aTime, StopIrrigReason reason) {
   const unsigned long irrigTimeSecs = aTime - irrigData.irrigSince;
+  if (TimeKeeper::isSameDate(aTime, irrigData.lastIrrigEnd)) {
+    irrigData.irrigTodaySecs += irrigTimeSecs;    
+  } else {
+    irrigData.irrigTodaySecs = irrigTimeSecs;
+  }
+
   irrigData.lastIrrigEnd = aTime;
-  irrigData.irrigTodaySecs += irrigTimeSecs;
   irrigData.isIrrigating = false;
 
   char tsStr[16];

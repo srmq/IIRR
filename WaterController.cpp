@@ -29,7 +29,7 @@ static void handleInterrupt() {
 }
 
 WaterStartStatus WellPumpWaterController::startWater(bool ignoreNoConf) {
- if(!ignoreNoConf && this->noConfStatus) return WATER_STARTNOCONF;
+ if(!ignoreNoConf && this->noConfStatus()) return WATER_STARTNOCONF;
  if(this->emptyTriggered) return WATER_STARTEMPTY;
  if(pumpIsOn) return WATER_STARTNOACTION;
 
@@ -50,7 +50,7 @@ WellPumpWaterController::~WellPumpWaterController() {
 
 WaterCurrSensorStatus WellPumpWaterController::currStatus() {
   if (this->emptyTriggered) return WATER_CURREMPTY;
-  if (this->noConfStatus) return WATER_CURRNOCONF;
+  if (this->noConfStatus()) return WATER_CURRNOCONF;
   double avgPulsesSec;
   turnOnSensor();
   avgSensorPulsesPerSec();
@@ -129,7 +129,6 @@ double WellPumpWaterController::avgSensorPulsesPerSec() {
 
 WellPumpWaterController::WellPumpWaterController() : WaterController(), 
     pumpIsOn(false), 
-    noConfStatus(mainConfParams.normalPulsesPerSec > 0 ? false : true),
     emptyTriggered(false){ 
       
   digitalWrite(PUMP_PIN, LOW);

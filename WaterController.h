@@ -20,6 +20,7 @@
 #define _WATERCONTROLLER_H
 
 #include "TimeKeeper.h"
+#include "ConfParams.h"
 
 enum WaterStartStatus {
   WATER_STARTOK = 0,
@@ -62,7 +63,7 @@ public:
 private:
   NTPClient::DelayHandlerFunction delayHandler = delay;
   bool pumpIsOn;
-  bool noConfStatus;
+  inline bool noConfStatus() {return mainConfParams.normalPulsesPerSec > 0 ? false : true;}
   bool emptyTriggered;
   void turnOnSensor();
   void turnOffSensor();
