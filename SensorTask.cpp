@@ -508,7 +508,8 @@ void SensorTask::loopSensorMode() {
       stopIrrigationAndLog(nowTime, STOPIRRIG_SURFACESAT);
     } else if (moistures.middle >= mainConfParams.satLevel) {
       stopIrrigationAndLog(nowTime, STOPIRRIG_MIDDLESAT);
-    } else if ((moistures.deep > irrigData.deepAtStartIrrig) && (moistures.deep > (irrigData.deepAtStartIrrig + 0.5*(mainConfParams.satLevel - irrigData.deepAtStartIrrig)))) {
+    } else if ((moistures.deep > irrigData.deepAtStartIrrig) && (moistures.deep > (irrigData.deepAtStartIrrig + 0.5*(mainConfParams.satLevel - irrigData.deepAtStartIrrig))) &&
+        moistures.surface > mainConfParams.critLevel && moistures.middle > mainConfParams.critLevel) {
       stopIrrigationAndLog(nowTime, STOPIRRIG_DEEPINCREASE); //FIXME 0.5 should be conf parameter
     } else if (irrigTodayRemainingSecs() == 0) {
       stopIrrigationAndLog(nowTime, STOPIRRIG_MAXTIMEDAY);
@@ -522,14 +523,14 @@ void SensorTask::loopSensorMode() {
     if (irrigTodayRemainingSecs() >= 0.2*mainConfParams.irrSlotSeconds) Serial.println("OK irrigTodayRemainingSecs"); else Serial.println("ERR irrigTodayRemainingSecs");
     if (fulfillMinIrrigInterval(nowTime)) Serial.println("OK nowTime fulfillMinIrrigationInterval"); else Serial.println("ERR fulfillMinIrrigationInterval");
     if (moistures.surface <= mainConfParams.critLevel || moistures.middle <= mainConfParams.critLevel) Serial.println("OK surface or Middle <= Crit"); else Serial.println("ERR surface or Middle <= Crit");
-    if (moistures.deep < mainConfParams.satLevel && moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel) Serial.println("OK moistures < satLevel"); else Serial.println("ERR moistures < satLevel");
+    if (moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel) Serial.println("OK moistures < satLevel"); else Serial.println("ERR moistures < satLevel");
     if ( !(TimeKeeper::isValidTS(nowTime) && isInNoIrrigTime(nowTime)) &&
          (irrigTodayRemainingSecs() >= 0.2*mainConfParams.irrSlotSeconds) && //FIXME 0.2 should be conf parameter
          fulfillMinIrrigInterval(nowTime) && 
          (currWaterStatus != WATER_CURREMPTY) &&
          (currWaterStatus != WATER_CURRNOCONF) &&
          (moistures.surface <= mainConfParams.critLevel || moistures.middle <= mainConfParams.critLevel) &&
-         (moistures.deep < mainConfParams.satLevel && moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel)
+         (moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel)
         ) 
       { //fulffil irrigation criteria, turn on irrigation
         Serial.println("I'm starting IRRIGATION");
@@ -817,35 +818,38 @@ void SensorTask::loop()  {
   unsigned long timeBeforeTest = millis();
   if (irrigData.isIrrigating) {
     while((millis() - timeBeforeTest) < SENSOR_READ_DELAY) {
+      //esperando 30 segundos para comecar a verificar status da agua
       //verificando status da irrigacao
-      WaterCurrSensorStatus statusWater = this->waterControl.currStatus();
-      if(statusWater != WATER_CURRFLOWING) {
-        //something wrong, log it
-        time_t timeStamp = TimeKeeper::tkNow();
-        char tsStr[16];
-        snprintf_P(tsStr, 16, TS_FMT_STR, this->timeKeeper.tkYear(timeStamp), this->timeKeeper.tkMonth(timeStamp), this->timeKeeper.tkDay(timeStamp), this->timeKeeper.tkHour(timeStamp), this->timeKeeper.tkMinute(timeStamp), this->timeKeeper.tkSecond(timeStamp));
-        File logFile = getCurrMsgFile(timeStamp);
-        if (logFile) {
-          logFile.print(tsStr);
-          logFile.print(',');
-          logFile.print(MSG_ERR);
-          logFile.print(',');
-          logFile.print(MSG_INCONSIST_WATER_CURRSTATUS);
-          logFile.print(',');
-          logFile.print(statusWater); //status was this
-          logFile.print(',');
-          logFile.println(WATER_CURRFLOWING); //but should be that
-          logFile.flush();
-          logFile.close();
+      const unsigned long irrigTimeSecs = TimeKeeper::tkNow() - irrigData.irrigSince;
+      if (irrigTimeSecs > 30) { //FIXME 30 should be conf param
+        WaterCurrSensorStatus statusWater = this->waterControl.currStatus();
+        if(statusWater != WATER_CURRFLOWING) {
+          //something wrong, log it
+          time_t timeStamp = TimeKeeper::tkNow();
+          char tsStr[16];
+          snprintf_P(tsStr, 16, TS_FMT_STR, this->timeKeeper.tkYear(timeStamp), this->timeKeeper.tkMonth(timeStamp), this->timeKeeper.tkDay(timeStamp), this->timeKeeper.tkHour(timeStamp), this->timeKeeper.tkMinute(timeStamp), this->timeKeeper.tkSecond(timeStamp));
+          File logFile = getCurrMsgFile(timeStamp);
+          if (logFile) {
+            logFile.print(tsStr);
+            logFile.print(',');
+            logFile.print(MSG_ERR);
+            logFile.print(',');
+            logFile.print(MSG_INCONSIST_WATER_CURRSTATUS);
+            logFile.print(',');
+            logFile.print(statusWater); //status was this
+            logFile.print(',');
+            logFile.println(WATER_CURRFLOWING); //but should be that
+            logFile.flush();
+            logFile.close();
+          }
+          stopIrrigationAndLog(timeStamp, STOPIRRIG_WATEREMPTY);
         }
-        stopIrrigationAndLog(timeStamp, STOPIRRIG_WATEREMPTY);
-      }
+      } else yield();
       //LIGAR O RESULTADO DE SE TEM AGUA NO MULTIPLEXADOR DE ENTRADA E LIBERAR O PINO
       //QUE ESTA SENDO USADO PARA LIGAR A BOMBA
       //ALEM DISSO TEM  O D8 QUE SERA USADO PARA LIGAR O SENSOR
       //LIGAR O SENSOR SEPARADO DA BOMBA PERMITE VERIFICAR SE ELA DESLIGOU DE VERDADE
       //VERIFICAR COMO DEVE SER A LIGAÇÃO DO RELE DE ESTADO SOLIDO, TENSAO, CORRENTE ETC.
-      
     }
   } else {
     this->delay(SENSOR_READ_DELAY);

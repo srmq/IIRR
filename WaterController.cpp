@@ -87,7 +87,7 @@ bool WellPumpWaterController::configureFlow() {
       return false;
     }
   }
-  delayHandler(5000);
+  delayHandler(30000);
   this->turnOnSensor();
   delayHandler(1000);
   avgSensorPulsesPerSec();
