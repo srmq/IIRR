@@ -22,25 +22,66 @@
 #include <functional>
 #include <ESP8266WiFi.h>
 
+#include "ESP8266WiFi.h"
+#include "ESP8266HTTPClient.h"
+
+#include "HttpDateParser.h"
+
 
 TimeKeeper::TimeKeeper() : ntpUDP(), ntpTimeClient(ntpUDP, "pool.ntp.org", 0, 3600000) {
 }
 
-static const char NTPTIME_NOT_UPDATED_MSG[] PROGMEM = "WARNING: TimeKeeper - NTP time NOT updated";
+static const char NTPTIME_NOT_UPDATED_MSG[] PROGMEM = "WARNING: TimeKeeper - NTP time NOT updated, trying HTTP";
+static const char HTTPTIME_NOT_UPDATED_MSG[] PROGMEM = "WARNING: TimeKeeper - HTTP fallback time update FAILED";
+static const char HTTPTIME_UPDATE_URL[] PROGMEM = "http://www.ntp.org"; //FIXME should be configurable and more than one option
+
+static bool tryHTTPUpdate(tmElements_t& timeStruct) {
+  const char * headerKeys[] = {"Date"};
+  const size_t numberOfHeaders = 1;
+  bool result = false;
+  if (WiFi.status() == WL_CONNECTED) { //Check WiFi connection status
+    HTTPClient http;
+    const String updateUrl = String(FPSTR(HTTPTIME_UPDATE_URL));
+    http.begin(updateUrl); 
+    http.collectHeaders(headerKeys, numberOfHeaders);
+ 
+    int httpCode = http.GET();
+ 
+    if (httpCode > 0) {
+      String headerDate = http.header("Date");
+      result = HttpDateParser::parseHTTPDate(headerDate, timeStruct);
+    }
+ 
+    http.end();
+ 
+  }
+  return result;
+}
 
 time_t TimeKeeper::syncTime() {
   bool timeUpdated = false;
   bool shouldUpdate = this->ntpTimeClient.shouldUpdate();
+  bool ntpUpdated = false;
+  bool httpUpdated = false;
   if (WiFi.status() == WL_CONNECTED && shouldUpdate) {
     timeUpdated = this->ntpTimeClient.update();
+    ntpUpdated = timeUpdated;
   }
+  time_t newTime;
   if (!timeUpdated && shouldUpdate) { 
     Serial.println(FPSTR(NTPTIME_NOT_UPDATED_MSG));
-    return 0;
+    tmElements_t timeStruct;
+    httpUpdated = tryHTTPUpdate(timeStruct);
+    if (!httpUpdated) {
+      Serial.println(FPSTR(HTTPTIME_NOT_UPDATED_MSG));
+      return 0;
+    } else {
+      newTime = makeTime(timeStruct);
+    }
   }
-  if (timeUpdated) {
-    time_t ntpTime = this->ntpTimeClient.getEpochTime();
-    setTime(ntpTime);
+  if (ntpUpdated || httpUpdated) {
+    if (ntpUpdated) newTime = this->ntpTimeClient.getEpochTime();
+    setTime(newTime);
   }
   return tkNow();
 }

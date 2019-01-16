@@ -524,7 +524,7 @@ void SensorTask::loopSensorMode() {
     if (fulfillMinIrrigInterval(nowTime)) Serial.println("OK nowTime fulfillMinIrrigationInterval"); else Serial.println("ERR fulfillMinIrrigationInterval");
     if (moistures.surface <= mainConfParams.critLevel || moistures.middle <= mainConfParams.critLevel) Serial.println("OK surface or Middle <= Crit"); else Serial.println("ERR surface or Middle <= Crit");
     if (moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel) Serial.println("OK moistures < satLevel"); else Serial.println("ERR moistures < satLevel");
-    if ( !(TimeKeeper::isValidTS(nowTime) && isInNoIrrigTime(nowTime)) &&
+    if ( nowTime > MIN_IRRIG_TS && !(TimeKeeper::isValidTS(nowTime) && isInNoIrrigTime(nowTime)) &&
          (irrigTodayRemainingSecs() >= 0.2*mainConfParams.irrSlotSeconds) && //FIXME 0.2 should be conf parameter
          fulfillMinIrrigInterval(nowTime) && 
          (currWaterStatus != WATER_CURREMPTY) &&

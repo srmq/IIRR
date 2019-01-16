@@ -26,6 +26,7 @@
 #include "TimeKeeper.h"
 #include "SensorTask.h"
 #include "DirStream.h"
+#include "WiFiTask.h"
 #include <memory>
 #include "FS.h"
 #include <algorithm>
@@ -62,6 +63,36 @@ static const char JSON_F_GETMYUTCTIME[] PROGMEM = "/v100/getMyUTCTime";
 static const char JSON_F_UPDATEUTCTIME[] PROGMEM = "/v100/updateMyUTCTime";
 static const char HTTP_MIME_CSV[] PROGMEM = "text/csv";
 
+WiFiEventHandler disconnectedEventHandler;
+
+void ServerTask::initializeAPMode() {
+  uint8_t mac[6];
+  char ssId[10] = { 0 };
+
+  WiFi.macAddress(mac);
+  sprintf_P(ssId, WIFI_DEFAULT_SSID_FMTSTR, mac[4], mac[5]);
+  char pass[13];
+  ServerTask::getAdminPassword(pass, 13);
+
+ 
+  WiFi.softAP(ssId, pass);
+  WiFi.mode(WIFI_AP);
+  WiFi.enableAP(true);
+  Serial.print(F("SSID: "));
+  Serial.println(ssId);
+  Serial.print(F("Default Pass: "));
+  Serial.println(pass);
+  IPAddress myIP = WiFi.softAPIP();
+  Serial.print(F("Own AP IP address: "));
+  Serial.println(myIP);
+ 
+}
+
+
+void ServerTask::onWifiDisconnected(const WiFiEventStationModeDisconnected& event) {
+  ServerTask::initializeAPMode();
+}
+
 void streamCSV(Stream &csvStream, size_t contentLength = CONTENT_LENGTH_UNKNOWN) {
   String csvMIME = String(FPSTR(HTTP_MIME_CSV));
   server.setContentLength(contentLength);
@@ -86,6 +117,8 @@ void streamCSV(Stream &csvStream, size_t contentLength = CONTENT_LENGTH_UNKNOWN)
       break;
   }
 }
+
+bool ServerTask::hasInitialized = false;
 
 int ServerTask::getAdminPassword(char outPassword[], int maxLen) {
   if (maxLen < 13) {
@@ -321,8 +354,10 @@ void ServerTask::handleWifiConnect(ServerTask *taskServer) {
       return sendJsonWithStatusOnly(SERVERTASK_HANDLE_WIFICONNECT_INVALIDPARAM_PASS, HTTP_BAD_REQUEST);
     }
     WiFi.begin(ssidStr.c_str(), pass.c_str());
+    WiFiTask::addToTop(ssidStr, pass);
   } else {
     WiFi.begin(ssidStr.c_str());
+    WiFiTask::addToTop(ssidStr, "");
   }
   StaticJsonBuffer<200> jsonBuffer;
   JsonObject& root = jsonBuffer.createObject();
@@ -439,24 +474,10 @@ void ServerTask::handleLearnWaterFlow(ServerTask *taskServer) {
 
 
 ServerTask::ServerTask() : Task() {
-  uint8_t mac[6];
-  char ssId[10] = { 0 };
-  
-  WiFi.macAddress(mac);
-  sprintf_P(ssId, WIFI_DEFAULT_SSID_FMTSTR, mac[4], mac[5]);
-  char pass[13];
-  getAdminPassword(pass, 13);
-  Serial.print(F("SSID: "));
-  Serial.println(ssId);
-  Serial.print(F("Default Pass: "));
-  Serial.println(pass);
+  ServerTask::initializeAPMode();
 
-  WiFi.softAP(ssId, pass);
-  IPAddress myIP = WiFi.softAPIP();
-  Serial.print(F("Own AP IP address: "));
-  Serial.println(myIP);
-  WiFi.mode(WIFI_AP); //FIXME assim nao esta conectando com a internet
-  WiFi.enableAP(true);
+  ServerTask::hasInitialized = false;
+
   /*
   if (WiFi.wifi_get_opmode() != WIFI_AP_STA) {
     WiFi.mode(WIFI_AP);
@@ -534,9 +555,11 @@ ServerTask::ServerTask() : Task() {
   static ESP8266WebServer::THandlerFunction myHandleUpdateUTCTime = std::bind(ServerTask::authenticateAndExecute, this, ServerTask::updateUTCTime);
   server.on(String(FPSTR(JSON_F_UPDATEUTCTIME)), HTTP_POST, myHandleUpdateUTCTime);
 
+  disconnectedEventHandler = WiFi.onStationModeDisconnected(&ServerTask::onWifiDisconnected);
 
   server.begin();
   Serial.println(F("HTTP server started"));
+  ServerTask::hasInitialized = true;
 }
 
 void ServerTask::loopServerMode() {

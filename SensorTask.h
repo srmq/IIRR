@@ -27,6 +27,8 @@
 #include "WaterController.h"
 #include "global_funcs.h"
 
+#define MIN_IRRIG_TS 300
+
 enum StopIrrigReason {
   STOPIRRIG_SLOTEND,
   STOPIRRIG_SURFACESAT,

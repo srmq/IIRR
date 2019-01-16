@@ -90,7 +90,13 @@ private:
   
   static void sendJsonWithStatusOnly(ServerTaskStatusCodes taskStatusCode, HTTPStatus httpStatus);
   
-  int getAdminPassword(char outPassword[], int maxLen);
+  static int getAdminPassword(char outPassword[], int maxLen);
+
+  static void onWifiDisconnected(const WiFiEventStationModeDisconnected& event);
+
+  static void initializeAPMode();
+
+  static bool hasInitialized;
 
 protected:
   void loop();
@@ -100,6 +106,7 @@ public:
     void wifiScanNets();
     void updateTimeDate();
     TimeKeeper *getTimeKeeper();
+    static inline bool initializationFinished() { return hasInitialized; }    
 
 };
 

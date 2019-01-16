@@ -1,4 +1,4 @@
-                          /**
+/**
  * IIRR -- Intelligent Irrigator Based on ESP8266
     Copyright (C) 2016--2018  Sergio Queiroz <srmq@cin.ufpe.br>
 
@@ -23,6 +23,7 @@
 #include "sensor_calibration.h"
 #include "SensorTask.h"
 #include "ServerTask.h"
+#include "WiFiTask.h"
 #include <Scheduler.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
@@ -40,9 +41,11 @@ void setup() {
   delay(1000);
   static SensorTask sensorTask;
   static ServerTask serverTask;
+  static WiFiTask wiFiTask;
 
   Scheduler.start(&sensorTask);
-  Scheduler.start(&serverTask);  
+  Scheduler.start(&serverTask);
+  Scheduler.start(&wiFiTask);
   Serial.println(F("SETUP"));
   Scheduler.begin();
 }
