@@ -31,6 +31,7 @@
 #include <TimeLib.h>
 #include <Time.h>
 
+bool fsOpen = false;
 
 void loop() {
   Serial.println(F("WARNING: loop() was called"));
@@ -42,6 +43,7 @@ void setup() {
   static SensorTask sensorTask;
   static ServerTask serverTask;
   static WiFiTask wiFiTask;
+  fsOpen = SPIFFS.begin();
 
   Scheduler.start(&sensorTask);
   Scheduler.start(&serverTask);
@@ -55,4 +57,3 @@ void setup() {
 //para o vaso) os tres foram para cerca de 0,62 e escorreu um 
 //pouco de agua
 //Depois de uns 10 minutos os sensores estavam todos em 100%
-

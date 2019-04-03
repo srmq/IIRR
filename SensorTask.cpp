@@ -34,8 +34,6 @@ IrrigData irrigData;
 static bool requestLearn;
 static AsyncLearnFlowStatus learnFlowStatus;
 
-bool fsOpen = false;
-
 static const char UNINPLEMENTED_CALL[] PROGMEM = "WARNING: Unimplemented call at ";
 static const char PARAMS_JSON_FILE[] PROGMEM = "/conf/params.json";
 
@@ -872,7 +870,6 @@ SensorTask::SensorTask() : Task() {
   pinMode(MULA_PIN, OUTPUT);
   pinMode(MULB_PIN, OUTPUT);
   pinMode(MULC_PIN, OUTPUT);
-  fsOpen = SPIFFS.begin();
   if (!fsOpen) {
     Serial.println(F("WARNING: filesystem open failed!"));
   } else {
@@ -1039,4 +1036,3 @@ bool SensorTask::stopIrrigationAndLog(time_t aTime, StopIrrigReason reason) {
   
   return updateFSResult;
 }
-
