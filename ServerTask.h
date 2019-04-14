@@ -54,7 +54,10 @@ enum ServerTaskStatusCodes {
   SERVERTASK_HANDLE_GETCSVFILE_FSNOTOPEN = -13,
   SERVERTASK_HANDLE_GETCSVFILE_NOPARAM_FILE = -14,
   SERVERTASK_HANDLE_GETCSVFILE_FILENOTFOUND = -15,
-  SERVERTASK_HANDLE_UPDATEUTCTIME_INVALIDPARAMS = -16
+  SERVERTASK_HANDLE_UPDATEUTCTIME_INVALIDPARAMS = -16,
+  SERVERTASK_HANDLE_GETCLOUDCONF_NOCONF = -17,
+  SERVERTASK_HANDLE_GETCLOUDCONF_FSNOTOPEN = -18,
+  CLOUDTASK_HANDLE_UPDATEMAINCONFPARAMS_INVALIDPARAMS = -19
 };
 
 enum HTTPStatus {
@@ -87,6 +90,8 @@ private:
   static void handleGetIrrigData(ServerTask *taskServer);
   static void handleGetMyUTCTime(ServerTask *taskServer);
   static void updateUTCTime(ServerTask *taskServer);
+  static void handleGetCloudConf(ServerTask *taskServer);
+  static void handleUpdateCloudConf(ServerTask *taskServer);
   
   static void sendJsonWithStatusOnly(ServerTaskStatusCodes taskStatusCode, HTTPStatus httpStatus);
   

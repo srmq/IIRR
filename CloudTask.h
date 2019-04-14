@@ -36,6 +36,7 @@ class CloudTask : public Task {
 public:
     CloudTask();
     bool isConfAvailable() { return CloudTask::confAvailable; }
+    static const size_t jsonBufferCapacity = JSON_OBJECT_SIZE(5)  + 220;
 
     //obter cloud conf para enviar para cliente
     //jsonForCloudConf -> passar buffer com tamanho adequado
@@ -47,7 +48,7 @@ public:
     static bool readCloudConf(CloudConf &conf);
 
     //update CloudConf with json data
-    static bool updateConfParamsFromJson(CloudConf &conf, JsonObject *root);
+    static bool updateConfParamsFromJson(CloudConf &conf, JsonObject& root);
 
     //update json file from CloudConf 
     static bool updateJsonFromConfParams(CloudConf &conf);

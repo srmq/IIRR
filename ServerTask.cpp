@@ -27,6 +27,7 @@
 #include "SensorTask.h"
 #include "DirStream.h"
 #include "WiFiTask.h"
+#include "CloudTask.h"
 #include <memory>
 #include "FS.h"
 #include <algorithm>
@@ -62,6 +63,9 @@ static const char JSON_F_GETIRRIGDATA[] PROGMEM = "/v100/getIrrigData";
 static const char JSON_F_GETMYUTCTIME[] PROGMEM = "/v100/getMyUTCTime";
 static const char JSON_F_UPDATEUTCTIME[] PROGMEM = "/v100/updateMyUTCTime";
 static const char HTTP_MIME_CSV[] PROGMEM = "text/csv";
+
+static const char JSON_F_CLOUDCONFPARAMS[] PROGMEM = "/v100/getCloudConfParams";
+static const char JSON_F_UPDATECLOUDCONFPARAMS[] PROGMEM = "/v100/updateCloudConfParams";
 
 WiFiEventHandler disconnectedEventHandler;
 
@@ -228,6 +232,21 @@ void ServerTask::handleGetLogDirContents(ServerTask *taskServer) {
   streamCSV(dStream);
 }
 
+void ServerTask::handleGetCloudConf(ServerTask *taskServer) {
+  if (!fsOpen) {
+    return sendJsonWithStatusOnly(SERVERTASK_HANDLE_GETCLOUDCONF_FSNOTOPEN, HTTP_INTERNAL_ERROR);
+  }
+  DynamicJsonBuffer jsonBuffer(CloudTask::jsonBufferCapacity);
+  JsonObject* pConf = CloudTask::jsonForCloudConf(jsonBuffer);
+  if (pConf == NULL) {
+    return sendJsonWithStatusOnly(SERVERTASK_HANDLE_GETCLOUDCONF_NOCONF, HTTP_NOT_FOUND);
+  }
+  String jsonStr;
+  pConf->printTo(jsonStr);
+  String jsonMime = String(FPSTR(WWW_MIME_JSON));
+  return server.send(HTTP_OK, jsonMime.c_str(), jsonStr);
+}
+
 void ServerTask::handleGetCSVFile(ServerTask *taskServer) {
   if (!fsOpen) {
     return sendJsonWithStatusOnly(SERVERTASK_HANDLE_GETCSVFILE_FSNOTOPEN, HTTP_INTERNAL_ERROR);
@@ -335,6 +354,17 @@ void ServerTask::handleUpdateMainConfParams(ServerTask *taskServer) {
   }
   return sendJsonWithStatusOnly(SERVERTASK_OK, HTTP_OK);
   
+}
+
+void ServerTask::handleUpdateCloudConf(ServerTask *taskServer) {
+    DynamicJsonBuffer jsonBuffer(CloudTask::jsonBufferCapacity);
+    JsonObject& root = jsonBuffer.parseObject(server.arg("plain"));
+    CloudConf conf;
+    if(CloudTask::updateConfParamsFromJson(conf, root)) {
+      return sendJsonWithStatusOnly(SERVERTASK_OK, HTTP_OK);
+    } else {
+      return sendJsonWithStatusOnly(CLOUDTASK_HANDLE_UPDATEMAINCONFPARAMS_INVALIDPARAMS, HTTP_BAD_REQUEST);
+    }
 }
 
 void ServerTask::handleWifiConnect(ServerTask *taskServer) {
@@ -555,6 +585,12 @@ ServerTask::ServerTask() : Task() {
   static ESP8266WebServer::THandlerFunction myHandleUpdateUTCTime = std::bind(ServerTask::authenticateAndExecute, this, ServerTask::updateUTCTime);
   server.on(String(FPSTR(JSON_F_UPDATEUTCTIME)), HTTP_POST, myHandleUpdateUTCTime);
 
+  static ESP8266WebServer::THandlerFunction myHandleGetCloudConfParams = std::bind(ServerTask::authenticateAndExecute, this, ServerTask::handleGetCloudConf);
+  server.on(String(FPSTR(JSON_F_CLOUDCONFPARAMS)), HTTP_GET, myHandleGetCloudConfParams);
+
+  static ESP8266WebServer::THandlerFunction myHandleUpdateCloudConfParams = std::bind(ServerTask::authenticateAndExecute, this, ServerTask::handleUpdateCloudConf);
+  server.on(String(FPSTR(JSON_F_UPDATECLOUDCONFPARAMS)), HTTP_POST, myHandleUpdateCloudConfParams);  
+
   disconnectedEventHandler = WiFi.onStationModeDisconnected(&ServerTask::onWifiDisconnected);
 
   server.begin();
@@ -577,5 +613,3 @@ void ServerTask::wifiScanNets() {
   this->delay(100);
   WiFi.scanNetworks(true);
 }
-
-

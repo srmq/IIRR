@@ -74,8 +74,7 @@ bool CloudTask::updateJsonFromConfParams(CloudConf &conf) {
   File confFile = SPIFFS.open(fileName, "w");
   if (!confFile) return false;
   
-  const size_t capacity = JSON_OBJECT_SIZE(5)  + 220;
-  DynamicJsonBuffer jsonBuffer(capacity);
+  DynamicJsonBuffer jsonBuffer(CloudTask::jsonBufferCapacity);
   JsonObject& doc = jsonBuffer.createObject();
   
   doc["baseUrl"] = conf.baseUrl;
@@ -90,12 +89,12 @@ bool CloudTask::updateJsonFromConfParams(CloudConf &conf) {
   return true;
 }
 
-bool CloudTask::updateConfParamsFromJson(CloudConf &conf, JsonObject *root) {
-  strncpy(conf.baseUrl, (*root)["baseUrl"], 128);
-  strncpy(conf.certHash, (*root)["certHash"], 40);
-  strncpy(conf.login, (*root)["login"], 64);
-  strncpy(conf.pass, (*root)["pass"], 64);
-  conf.enabled = (*root)["enabled"];
+bool CloudTask::updateConfParamsFromJson(CloudConf &conf, JsonObject &root) {
+  strncpy(conf.baseUrl, root["baseUrl"], 128);
+  strncpy(conf.certHash, root["certHash"], 40);
+  strncpy(conf.login, root["login"], 64);
+  strncpy(conf.pass, root["pass"], 64);
+  conf.enabled = root["enabled"];
   return true;
 }
 
@@ -116,6 +115,6 @@ bool CloudTask::readCloudConf(CloudConf &conf) {
   DynamicJsonBuffer jsonBuffer(bufferSize);
   JsonObject* root = jsonForCloudConf(jsonBuffer);
   if (root == NULL) return false;
-  bool result = updateConfParamsFromJson(conf, root);
+  bool result = updateConfParamsFromJson(conf, *root);
   return result;
 }
