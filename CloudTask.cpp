@@ -19,7 +19,7 @@
 #include "CloudTask.h"
 #include "ServerTask.h"
 #include "FS.h"
-#include <cstring>
+
 
 static const char CPARAMS_JSON_FILE[] PROGMEM = "/conf/cparams.json";
 
@@ -62,13 +62,7 @@ void CloudTask::loop()  {
 }
 
 bool CloudTask::updateJsonFromConfParams(CloudConf &conf) {
-  if (strlen(conf.baseUrl) < 10) return false;
-  if (strlen(conf.baseUrl) > 128) return false;
-  if (strlen(conf.certHash) != 40) return false;
-  if (strlen(conf.login) < 2) return false;
-  if (strlen(conf.login) > 64) return false;
-  if (strlen(conf.pass) < 4) return false;
-  if (strlen(conf.pass) > 64) return false;
+  if(!conf.isAllValid()) return false;
 
   String fileName = String(FPSTR(CPARAMS_JSON_FILE));
   File confFile = SPIFFS.open(fileName, "w");
@@ -95,6 +89,7 @@ bool CloudTask::updateConfParamsFromJson(CloudConf &conf, JsonObject &root) {
   strncpy(conf.login, root["login"], 64);
   strncpy(conf.pass, root["pass"], 64);
   conf.enabled = root["enabled"];
+  if (!conf.isAllValid()) return false;
   return true;
 }
 

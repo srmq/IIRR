@@ -21,16 +21,29 @@
 #include <Scheduler.h>
 #include "TimeKeeper.h"
 #include <ArduinoJson.h>
+#include <cstring>
 
 #define CLOUD_CHECK_SECS 240
 
-typedef struct cloud_conf {
+class CloudConf {
+public:
   char baseUrl[129];
   char certHash[41];
   char login[65];
   char pass[65];
   short enabled;
-} CloudConf;
+
+  inline bool isAllValid() {
+      if (strlen(baseUrl) < 10) return false;
+      if (strlen(baseUrl) > 128) return false;
+      if (strlen(certHash) != 40) return false;
+      if (strlen(login) < 2) return false;
+      if (strlen(login) > 64) return false;
+      if (strlen(pass) < 4) return false;
+      if (strlen(pass) > 64) return false;
+      return true;
+  }
+};
 
 class CloudTask : public Task {
 public:
