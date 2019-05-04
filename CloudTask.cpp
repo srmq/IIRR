@@ -19,11 +19,31 @@
 #include "CloudTask.h"
 #include "ServerTask.h"
 #include "FS.h"
+#include <pgmspace.h>
+#include <Arduino.h>
+#include <cstring>
+
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
 
 
 static const char CPARAMS_JSON_FILE[] PROGMEM = "/conf/cparams.json";
 
+static const char DATALOG_SENDPARAMS_URL[] PROGMEM = "/v100/datalog/send-params";
+static const char MSGLOG_SENDPARAMS_URL[] PROGMEM = "/v100/msglog/send-params";
+static const char AUTH_HEADER[] PROGMEM = "WWW-Authenticate";
+
 bool CloudTask::confAvailable = false;
+
+CloudConf::CloudConf() {
+  memset(this->baseUrl, 0, sizeof(this->baseUrl));
+  memset(this->certHash, 0, sizeof(this->certHash));
+  memset(this->login, 0, sizeof(this->login));
+  memset(this->pass, 0, sizeof(this->pass));
+  this->enabled = 0;
+}
 
 CloudTask::CloudTask() : Task(), firstRun(true), lastCheck(TimeKeeper::tkNow()) {
   String confFileName = String(FPSTR(CPARAMS_JSON_FILE));
@@ -34,6 +54,62 @@ CloudTask::CloudTask() : Task(), firstRun(true), lastCheck(TimeKeeper::tkNow()) 
   }
 }
 
+static String exractParam(String& authReq, const String& param, const char delimit) {
+  int _begin = authReq.indexOf(param);
+  if (_begin == -1) {
+    return "";
+  }
+  return authReq.substring(_begin + param.length(), authReq.indexOf(delimit, _begin + param.length()));
+}
+
+static String getCNonce(const int len) {
+  static const char alphanum[] =
+    "0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz";
+  String s = "";
+
+  for (int i = 0; i < len; ++i) {
+    s += alphanum[rand() % (sizeof(alphanum) - 1)];
+  }
+
+  return s;
+}
+
+static String getDigestAuth(String& authReq, const String& username, const String& password, const String& uri, unsigned int counter) {
+  // extracting required parameters for RFC 2069 simpler Digest
+  String realm = exractParam(authReq, "realm=\"", '"');
+  String nonce = exractParam(authReq, "nonce=\"", '"');
+  String cNonce = getCNonce(8);
+
+  char nc[9];
+  snprintf(nc, sizeof(nc), "%08x", counter);
+
+  // parameters for the RFC 2617 newer Digest
+  MD5Builder md5;
+  md5.begin();
+  md5.add(username + ":" + realm + ":" + password);  // md5 of the user:realm:user
+  md5.calculate();
+  String h1 = md5.toString();
+
+  md5.begin();
+  md5.add(String("GET:") + uri);
+  md5.calculate();
+  String h2 = md5.toString();
+
+  md5.begin();
+  md5.add(h1 + ":" + nonce + ":" + String(nc) + ":" + cNonce + ":" + "auth" + ":" + h2);
+  md5.calculate();
+  String response = md5.toString();
+
+  String authorization = "Digest username=\"" + username + "\", realm=\"" + realm + "\", nonce=\"" + nonce +
+                         "\", uri=\"" + uri + "\", algorithm=\"MD5\", qop=auth, nc=" + String(nc) + ", cnonce=\"" + cNonce + "\", response=\"" + response + "\"";
+  Serial.println(authorization);
+
+  return authorization;
+}
+
+
 void CloudTask::loop()  {
   if (CloudTask::confAvailable) {
     if (ServerTask::initializationFinished()) {
@@ -41,11 +117,101 @@ void CloudTask::loop()  {
       const time_t diffTime = nowTime - lastCheck;
       if (diffTime > CLOUD_CHECK_SECS || firstRun) { //should see if we are connected
           if(WiFi.status() == WL_CONNECTED) {
+            Serial.println(F("Will try cloud loop"));
+            
             CloudConf conf;
-            bool readOk = readCloudConf(conf); 
-            if (readOk) {
-              //FIXME do magic
-            }
+            bool readOk = readCloudConf(conf);
+            if (readOk && conf.isAllValid() && conf.enabled != 0) {
+              const short lenParamUrl = strlen(conf.baseUrl) + strlen_P(DATALOG_SENDPARAMS_URL)+2;
+              char paramUrl[lenParamUrl];
+              strcpy(paramUrl, conf.baseUrl);
+              if(paramUrl[strlen(paramUrl)-1] == '/') 
+                paramUrl[strlen(paramUrl)-1] = '\0';
+              strcat_P(paramUrl, DATALOG_SENDPARAMS_URL);
+              Serial.print(F("PARAM URL IS: "));
+              Serial.println(paramUrl);
+              bool fail = false;
+              
+              /*uint8_t fingerprint[20];
+              if(strlen(conf.certHash) == 40) {
+                for (int i = 0; i < 20; i++) {
+                  Serial.println(F("PREPARING TO COPY"));
+                  char strToScan[3];
+                  memset(strToScan, 0, sizeof(strToScan));
+                  strncpy(strToScan, &(conf.certHash[2*i]), 2);
+                  Serial.println(F("TRIED SCANF"));
+                  int scannedInt;
+                  if (sscanf(strToScan, "%2x", &scannedInt) != 1) {
+                    fail = true;
+                    break;
+                  } else {
+                    fingerprint[i] = (uint8_t) scannedInt;
+                  }
+                }
+              } else {
+                Serial.println(F("Fail on CloudTask: fingerprint invalid"));
+                fail = true;
+              }
+              Serial.println(F("PASSED FINGERPRINT CALC"));
+              */
+              
+              if (!fail) {
+                //url and fingerprint are ok
+                //std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
+                //client->setFingerprint(fingerprint);
+                WiFiClient client;
+                HTTPClient http;
+                Serial.print(F("[HTTP] begin...\n"));
+                if (http.begin(client, paramUrl)) {  // HTTP
+                  //http.setAuthorization(conf.login, conf.pass);
+                  Serial.print(F("[HTTP] 1st GET...\n"));
+                  // start connection and send HTTP header
+                  String authHeader = String(FPSTR(AUTH_HEADER));
+                  const char *keys[] = {authHeader.c_str()};
+                  http.collectHeaders(keys, 1);
+                  
+                  int httpCode = http.GET();
+                  Serial.println(F("PASSED 1st http.GET()"));
+                  if (httpCode > 0) {
+                    String authReq = http.header(authHeader.c_str());
+                    Serial.println(authReq);
+                    String authorization = getDigestAuth(authReq, String(conf.login), String(conf.pass), String(paramUrl), 1);
+                    http.end();
+
+                    if (http.begin(client, paramUrl)) {
+                      http.addHeader("Authorization", authorization);
+                      httpCode = http.GET();
+                      // httpCode will be negative on error
+                      if (httpCode > 0) {
+                        // HTTP header has been send and Server response header has been handled
+                        Serial.printf(String(F("[HTTP] GET... code: %d\n")).c_str(), httpCode);
+                        
+                        // file found at server
+                        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+                          String payload = http.getString();
+                          Serial.println(payload);
+                        }
+                      } else {
+                        Serial.printf(String(F("[HTTP] GET... failed on 2nd time, error: %s\n")).c_str(), http.errorToString(httpCode).c_str());
+                      }
+                      http.end();
+                    }
+                  } else {
+                    Serial.printf(String(F("[HTTP] Unable to connect 2nd time\n")).c_str());
+                  }
+
+            
+                } else {
+                  Serial.printf(String(F("[HTTP] Unable to connect 1st time\n")).c_str());
+                }
+                
+              } else {
+                Serial.println(F("fail true on CloudTask"));
+              }
+              
+            } else {
+              Serial.println(F("Could not read CloudConf, will try again after interval"));
+            } 
             firstRun = false;
           }
           lastCheck= nowTime;
@@ -58,7 +224,6 @@ void CloudTask::loop()  {
   } else {
     this->delay(1000);
   }
-  
 }
 
 bool CloudTask::updateJsonFromConfParams(CloudConf &conf) {
@@ -70,12 +235,18 @@ bool CloudTask::updateJsonFromConfParams(CloudConf &conf) {
   
   DynamicJsonBuffer jsonBuffer(CloudTask::jsonBufferCapacity);
   JsonObject& doc = jsonBuffer.createObject();
+  String nBaseUrl = String(F("baseUrl"));
+  String ncertHash = String(F("certHash"));
+  String nLogin = String(F("login"));
+  String nPass = String(F("pass"));
+  String nEnabled = String(F("enabled"));
   
-  doc["baseUrl"] = conf.baseUrl;
-  doc["certHash"] = conf.certHash;
-  doc["login"] = conf.login;
-  doc["pass"] = conf.pass;
-  doc["enabled"] = (conf.enabled == 0) ? 0 : 1;
+  
+  doc[nBaseUrl.c_str()] = conf.baseUrl;
+  doc[ncertHash.c_str()] = conf.certHash;
+  doc[nLogin.c_str()] = conf.login;
+  doc[nPass.c_str()] = conf.pass;
+  doc[nEnabled.c_str()] = (conf.enabled == 0) ? 0 : 1;
   doc.printTo(confFile);
   confFile.flush();
   confFile.close();
@@ -84,10 +255,10 @@ bool CloudTask::updateJsonFromConfParams(CloudConf &conf) {
 }
 
 bool CloudTask::updateConfParamsFromJson(CloudConf &conf, JsonObject &root) {
-  strncpy(conf.baseUrl, root["baseUrl"], 128);
-  strncpy(conf.certHash, root["certHash"], 40);
-  strncpy(conf.login, root["login"], 64);
-  strncpy(conf.pass, root["pass"], 64);
+  strncpy(conf.baseUrl, String(root.get<const char*>("baseUrl")).c_str(), 128);
+  strncpy(conf.certHash, String(root.get<const char*>("certHash")).c_str(), 40);
+  strncpy(conf.login, String(root.get<const char*>("login")).c_str(), 64);
+  strncpy(conf.pass, String(root.get<const char*>("pass")).c_str(), 64);
   conf.enabled = root["enabled"];
   if (!conf.isAllValid()) return false;
   return true;

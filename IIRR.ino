@@ -23,6 +23,7 @@
 #include "sensor_calibration.h"
 #include "SensorTask.h"
 #include "ServerTask.h"
+#include "CloudTask.h"
 #include "WiFiTask.h"
 #include <Scheduler.h>
 #include <WiFiUdp.h>
@@ -38,16 +39,18 @@ void loop() {
 }
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   delay(1000);
+  fsOpen = SPIFFS.begin();
   static SensorTask sensorTask;
   static ServerTask serverTask;
   static WiFiTask wiFiTask;
-  fsOpen = SPIFFS.begin();
+  static CloudTask cloudTask;
 
   Scheduler.start(&sensorTask);
   Scheduler.start(&serverTask);
   Scheduler.start(&wiFiTask);
+  Scheduler.start(&cloudTask);
   Serial.println(F("SETUP"));
   Scheduler.begin();
 }

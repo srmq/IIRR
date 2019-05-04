@@ -22,6 +22,9 @@
 #include "TimeKeeper.h"
 #include <ArduinoJson.h>
 #include <cstring>
+#include <pgmspace.h>
+#include <Arduino.h>
+
 
 #define CLOUD_CHECK_SECS 240
 
@@ -32,6 +35,7 @@ public:
   char login[65];
   char pass[65];
   short enabled;
+  CloudConf();
 
   inline bool isAllValid() {
       if (strlen(baseUrl) < 10) return false;
@@ -41,6 +45,11 @@ public:
       if (strlen(login) > 64) return false;
       if (strlen(pass) < 4) return false;
       if (strlen(pass) > 64) return false;
+      {
+        String httpStr = String(F("http://"));
+        String httpsStr = String(F("https://"));
+        if ((strstr(baseUrl, httpStr.c_str()) == NULL) && (strstr(baseUrl, httpsStr.c_str()) == NULL)) return false;
+      }
       return true;
   }
 };

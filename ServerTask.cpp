@@ -361,9 +361,13 @@ void ServerTask::handleUpdateCloudConf(ServerTask *taskServer) {
     JsonObject& root = jsonBuffer.parseObject(server.arg("plain"));
     CloudConf conf;
     if(CloudTask::updateConfParamsFromJson(conf, root)) {
-      return sendJsonWithStatusOnly(SERVERTASK_OK, HTTP_OK);
+      if (CloudTask::updateJsonFromConfParams(conf)) {
+        return sendJsonWithStatusOnly(SERVERTASK_OK, HTTP_OK);  
+      } else {
+        return sendJsonWithStatusOnly(CLOUDTASK_HANDLE_UPDATECONFPARAMS_ERRORWRITEJSON, HTTP_INTERNAL_ERROR);
+      }      
     } else {
-      return sendJsonWithStatusOnly(CLOUDTASK_HANDLE_UPDATEMAINCONFPARAMS_INVALIDPARAMS, HTTP_BAD_REQUEST);
+      return sendJsonWithStatusOnly(CLOUDTASK_HANDLE_UPDATECONFPARAMS_INVALIDPARAMS, HTTP_BAD_REQUEST);
     }
 }
 
