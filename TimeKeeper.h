@@ -110,6 +110,8 @@ public:
   static inline bool isSameDate(time_t tsA, time_t tsB)   {
     return (tkYear(tsA) == tkYear(tsB)) && (tkMonth(tsA) == tkMonth(tsB)) && (tkDay(tsA) == tkDay(tsB));
   }
+
+  static time_t firstValidTime();
 };
 
 #endif

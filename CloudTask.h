@@ -25,8 +25,21 @@
 #include <pgmspace.h>
 #include <Arduino.h>
 
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
+
+
 
 #define CLOUD_CHECK_SECS 240
+
+enum CloudTaskStatusCodes {
+  CLOUDTASK_INVALID_CLOUDCONF = -200,
+  CLOUDTASK_AUTHANDGET_1STBEGIN_ERR = -201,
+  CLOUDTASK_AUTHANDGET_2NDBEGIN_ERR = -202,
+  CLOUDTASK_AUTHANDGET_NOAUTHHEADER = -203
+};
 
 class CloudConf {
 public:
@@ -78,6 +91,10 @@ public:
     //jsonobject with cloudconf allocated inside bufferToUse, or NULL if no conf
     static JsonObject* jsonForCloudConf(DynamicJsonBuffer& bufferToUse);
 
+    //caller is responsible for calling http.end()
+    static int httpDigestAuthAndGET(CloudConf& conf, const char* urlEntry, WiFiClient& client,
+                HTTPClient& http);
+
 
 
 protected:
@@ -87,6 +104,9 @@ private:
     bool firstRun;
     time_t lastCheck;
     static bool confAvailable;
+
+    time_t lastTSDataSent;
+    time_t lastTSMsgSent;
     
 };
 

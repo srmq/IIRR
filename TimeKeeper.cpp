@@ -85,3 +85,16 @@ time_t TimeKeeper::syncTime() {
   }
   return tkNow();
 }
+
+time_t TimeKeeper::firstValidTime() {
+  tmElements_t timeStruct;
+  timeStruct.Second = 0;
+  timeStruct.Minute = 0;
+  timeStruct.Hour = 0;
+  timeStruct.Wday = 6;
+  timeStruct.Day = 1;
+  timeStruct.Month = 1;
+  timeStruct.Year = (2016 - 1970);
+ 
+  return TimeKeeper::tkMakeTime(timeStruct);
+}

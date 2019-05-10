@@ -52,6 +52,8 @@ CloudTask::CloudTask() : Task(), firstRun(true), lastCheck(TimeKeeper::tkNow()) 
           CloudTask::confAvailable = true;
     }
   }
+  this->lastTSDataSent = TimeKeeper::firstValidTime();
+  this->lastTSMsgSent = this->lastTSDataSent;
 }
 
 static String exractParam(String& authReq, const String& param, const char delimit) {
@@ -109,6 +111,49 @@ static String getDigestAuth(String& authReq, const String& username, const Strin
   return authorization;
 }
 
+int CloudTask::httpDigestAuthAndGET(CloudConf& conf, const char* urlEntry, WiFiClient& client,
+                         HTTPClient& http) {
+  if( !conf.isAllValid() ) {
+    return CLOUDTASK_INVALID_CLOUDCONF;        
+  }
+  const short lenParamUrl = strlen(conf.baseUrl) + strlen(urlEntry)+2;
+  char paramUrl[lenParamUrl];
+  strcpy(paramUrl, conf.baseUrl);
+  if(paramUrl[strlen(paramUrl)-1] == '/') 
+    paramUrl[strlen(paramUrl)-1] = '\0';
+  strcat(paramUrl, urlEntry);
+  Serial.print(F("PARAM URL IS: "));
+  Serial.println(paramUrl);
+  Serial.print(F("[HTTP] begin...\n"));
+  if (!http.begin(client, paramUrl))
+    return CLOUDTASK_AUTHANDGET_1STBEGIN_ERR;
+
+  Serial.print(F("[HTTP] 1st GET...\n"));
+  // start connection and send HTTP header
+  String authHeader = String(FPSTR(AUTH_HEADER));
+  const char *keys[] = {authHeader.c_str()};
+  http.collectHeaders(keys, 1);
+  
+  int httpCode = http.GET();
+  Serial.println(F("PASSED 1st http.GET()"));
+  if (httpCode <= 0)
+    return httpCode;
+
+  String authReq = http.header(authHeader.c_str());
+  Serial.println(authReq);
+  if (!(authReq.length() > 0)) 
+    return CLOUDTASK_AUTHANDGET_NOAUTHHEADER;
+  String authorization = getDigestAuth(authReq, String(conf.login), String(conf.pass), String(paramUrl), 1);
+  http.end();
+
+  if (!http.begin(client, paramUrl))
+    return CLOUDTASK_AUTHANDGET_2NDBEGIN_ERR;
+
+  http.addHeader("Authorization", authorization);
+  httpCode = http.GET();
+  return httpCode;  
+}
+
 
 void CloudTask::loop()  {
   if (CloudTask::confAvailable) {
@@ -122,95 +167,22 @@ void CloudTask::loop()  {
             CloudConf conf;
             bool readOk = readCloudConf(conf);
             if (readOk && conf.isAllValid() && conf.enabled != 0) {
-              const short lenParamUrl = strlen(conf.baseUrl) + strlen_P(DATALOG_SENDPARAMS_URL)+2;
-              char paramUrl[lenParamUrl];
-              strcpy(paramUrl, conf.baseUrl);
-              if(paramUrl[strlen(paramUrl)-1] == '/') 
-                paramUrl[strlen(paramUrl)-1] = '\0';
-              strcat_P(paramUrl, DATALOG_SENDPARAMS_URL);
-              Serial.print(F("PARAM URL IS: "));
-              Serial.println(paramUrl);
-              bool fail = false;
-              
-              /*uint8_t fingerprint[20];
-              if(strlen(conf.certHash) == 40) {
-                for (int i = 0; i < 20; i++) {
-                  Serial.println(F("PREPARING TO COPY"));
-                  char strToScan[3];
-                  memset(strToScan, 0, sizeof(strToScan));
-                  strncpy(strToScan, &(conf.certHash[2*i]), 2);
-                  Serial.println(F("TRIED SCANF"));
-                  int scannedInt;
-                  if (sscanf(strToScan, "%2x", &scannedInt) != 1) {
-                    fail = true;
-                    break;
-                  } else {
-                    fingerprint[i] = (uint8_t) scannedInt;
-                  }
-                }
-              } else {
-                Serial.println(F("Fail on CloudTask: fingerprint invalid"));
-                fail = true;
-              }
-              Serial.println(F("PASSED FINGERPRINT CALC"));
-              */
-              
-              if (!fail) {
-                //url and fingerprint are ok
-                //std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
-                //client->setFingerprint(fingerprint);
-                WiFiClient client;
-                HTTPClient http;
-                Serial.print(F("[HTTP] begin...\n"));
-                if (http.begin(client, paramUrl)) {  // HTTP
-                  //http.setAuthorization(conf.login, conf.pass);
-                  Serial.print(F("[HTTP] 1st GET...\n"));
-                  // start connection and send HTTP header
-                  String authHeader = String(FPSTR(AUTH_HEADER));
-                  const char *keys[] = {authHeader.c_str()};
-                  http.collectHeaders(keys, 1);
-                  
-                  int httpCode = http.GET();
-                  Serial.println(F("PASSED 1st http.GET()"));
-                  if (httpCode > 0) {
-                    String authReq = http.header(authHeader.c_str());
-                    Serial.println(authReq);
-                    String authorization = getDigestAuth(authReq, String(conf.login), String(conf.pass), String(paramUrl), 1);
-                    http.end();
+              String datalogEntryPoint = String(FPSTR(DATALOG_SENDPARAMS_URL));
+              WiFiClient client;
+              HTTPClient http;
 
-                    if (http.begin(client, paramUrl)) {
-                      http.addHeader("Authorization", authorization);
-                      httpCode = http.GET();
-                      // httpCode will be negative on error
-                      if (httpCode > 0) {
-                        // HTTP header has been send and Server response header has been handled
-                        Serial.printf(String(F("[HTTP] GET... code: %d\n")).c_str(), httpCode);
-                        
-                        // file found at server
-                        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
-                          String payload = http.getString();
-                          Serial.println(payload);
-                        }
-                      } else {
-                        Serial.printf(String(F("[HTTP] GET... failed on 2nd time, error: %s\n")).c_str(), http.errorToString(httpCode).c_str());
-                      }
-                      http.end();
-                    }
-                  } else {
-                    Serial.printf(String(F("[HTTP] Unable to connect 2nd time\n")).c_str());
-                  }
+              int retCode = CloudTask::httpDigestAuthAndGET(conf, datalogEntryPoint.c_str(), client, http);
 
-            
-                } else {
-                  Serial.printf(String(F("[HTTP] Unable to connect 1st time\n")).c_str());
-                }
-                
+              if (retCode == HTTP_CODE_OK) {
+                String payload = http.getString();
+                Serial.println(payload);
               } else {
-                Serial.println(F("fail true on CloudTask"));
+                Serial.print(F("Not HTTP_CODE_OK returned when calling httpDigestAuthAndGET: "));
+                Serial.println(retCode);
               }
-              
+              http.end();
             } else {
-              Serial.println(F("Could not read CloudConf, will try again after interval"));
+              Serial.println(F("Could not read CloudConf or conf not enabled, will try again after interval"));
             } 
             firstRun = false;
           }
@@ -219,7 +191,6 @@ void CloudTask::loop()  {
       } else {
           this->delay((CLOUD_CHECK_SECS - diffTime)*1000);
       }
-    
     } else yield();
   } else {
     this->delay(1000);
