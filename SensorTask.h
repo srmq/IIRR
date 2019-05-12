@@ -85,10 +85,10 @@ private:
 
   File getCurrLogFile(time_t nowTime);
   File getCurrMsgFile(time_t nowTime);
-  File getFSFileWithDate(time_t nowTime, PGM_P fmtStr, const int bufSize);
+  static File getFSFileWithDate(time_t nowTime, PGM_P fmtStr, const int bufSize);
 
-  bool doFSMaintenance(int keepDays);
-  bool doFSMaintenance(int keepDays, const String& dirName, const String& commonName);
+  static bool doFSMaintenance(int keepDays);
+  static bool doFSMaintenance(int keepDays, const String& dirName, const String& commonName);
 
   ConfParams *readMainConfParams();
 
@@ -124,7 +124,12 @@ public:
     static void asyncLearnNormalFlow();
     static AsyncLearnFlowStatus getLastLearnFlowStatus();
     static void resetLearnFlowStatus();
+    static File getLogFileWithDate(time_t theDate);
+    static File getMsgFileWithDate(time_t theDate);
+
 
 };
+
+
 
 #endif

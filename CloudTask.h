@@ -38,7 +38,20 @@ enum CloudTaskStatusCodes {
   CLOUDTASK_INVALID_CLOUDCONF = -200,
   CLOUDTASK_AUTHANDGET_1STBEGIN_ERR = -201,
   CLOUDTASK_AUTHANDGET_2NDBEGIN_ERR = -202,
-  CLOUDTASK_AUTHANDGET_NOAUTHHEADER = -203
+  CLOUDTASK_AUTHANDGET_NOAUTHHEADER = -203,
+  CLOUDTASK_AUTHANDPOST_1STBEGIN_ERR = -204,
+  CLOUDTASK_AUTHANDPOST_NOAUTHHEADER = -205,
+  CLOUDTASK_AUTHANDPOST_2NDBEGIN_ERR = -206
+};
+
+class SendParams {
+public:
+  int status;
+  time_t lastTS;
+  int maxLines;
+  time_t now;
+  int errno;
+  SendParams() : status(0), lastTS(0), maxLines(0), now(0), errno(0) { }
 };
 
 class CloudConf {
@@ -95,7 +108,15 @@ public:
     static int httpDigestAuthAndGET(CloudConf& conf, const char* urlEntry, WiFiClient& client,
                 HTTPClient& http);
 
+    static std::shared_ptr<String> payloadGET(CloudConf &conf, const String& entryPoint, int& httpRetCode);
 
+    static int httpDigestAuthAndCSVPOST(time_t onlyAfter, int maxLines, Stream& csvStream, DynamicJsonBuffer& returnObject,
+                CloudConf& conf, const char* urlEntry, WiFiClient& client, HTTPClient& http);
+
+    static bool decodeSendParams(const String& jsonString, SendParams& decodedSendParams);
+
+    static bool getDatalogSendParams(CloudConf& conf, SendParams& sendParams);
+    static bool getMsglogSendParams(CloudConf& conf, SendParams& sendParams); 
 
 protected:
     void loop();
@@ -107,6 +128,8 @@ private:
 
     time_t lastTSDataSent;
     time_t lastTSMsgSent;
+
+    static bool getEntryPointSendParams(CloudConf& conf, SendParams& sendParams, const String& entryPoint);
     
 };
 

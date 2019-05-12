@@ -18,6 +18,8 @@
 #include "global_funcs.h"
 #include "CloudTask.h"
 #include "ServerTask.h"
+#include "LineLimitedReadStream.h"
+#include "HttpDateParser.h"
 #include "FS.h"
 #include <pgmspace.h>
 #include <Arduino.h>
@@ -111,6 +113,52 @@ static String getDigestAuth(String& authReq, const String& username, const Strin
   return authorization;
 }
 
+int CloudTask::httpDigestAuthAndCSVPOST(time_t onlyAfter, int maxLines, Stream& csvStream, DynamicJsonBuffer& returnObject,
+                CloudConf& conf, const char* urlEntry, WiFiClient& client, HTTPClient& http) {
+
+  if( !conf.isAllValid() ) {
+    return CLOUDTASK_INVALID_CLOUDCONF;        
+  }
+  const short lenParamUrl = strlen(conf.baseUrl) + strlen(urlEntry)+2;
+  char paramUrl[lenParamUrl];
+  strcpy(paramUrl, conf.baseUrl);
+  if(paramUrl[strlen(paramUrl)-1] == '/') 
+    paramUrl[strlen(paramUrl)-1] = '\0';
+  strcat(paramUrl, urlEntry);
+  Serial.print(F("PARAM URL IS: "));
+  Serial.println(paramUrl);
+  Serial.print(F("[HTTP] begin...\n"));
+  if (!http.begin(client, paramUrl))
+    return CLOUDTASK_AUTHANDPOST_1STBEGIN_ERR;
+
+  Serial.print(F("[HTTP] 1st POST...\n"));
+  // start connection and send HTTP header
+  String authHeader = String(FPSTR(AUTH_HEADER));
+  const char *keys[] = {authHeader.c_str()};
+  http.collectHeaders(keys, 1);
+  
+  int httpCode = http.POST("H");
+    Serial.println(F("PASSED 1st http.POST()"));
+  if (httpCode <= 0)
+    return httpCode;
+
+  String authReq = http.header(authHeader.c_str());
+  Serial.println(authReq);
+  if (!(authReq.length() > 0)) 
+    return CLOUDTASK_AUTHANDPOST_NOAUTHHEADER;
+  String authorization = getDigestAuth(authReq, String(conf.login), String(conf.pass), String(paramUrl), 1);
+  http.end();
+
+  if (!http.begin(client, paramUrl))
+    return CLOUDTASK_AUTHANDPOST_2NDBEGIN_ERR;
+
+  http.addHeader("Authorization", authorization);
+  http.addHeader("Content-Type", "text/csv");
+  LineLimitedReadStream limitedStream(csvStream, maxLines);
+  httpCode = http.sendRequest("POST", (Stream *)&limitedStream, 0);
+  return httpCode;  
+}
+
 int CloudTask::httpDigestAuthAndGET(CloudConf& conf, const char* urlEntry, WiFiClient& client,
                          HTTPClient& http) {
   if( !conf.isAllValid() ) {
@@ -154,7 +202,84 @@ int CloudTask::httpDigestAuthAndGET(CloudConf& conf, const char* urlEntry, WiFiC
   return httpCode;  
 }
 
+std::shared_ptr<String> CloudTask::payloadGET(CloudConf &conf, const String& entryPoint, int& httpRetCode) {
+  WiFiClient client;
+  HTTPClient http;
+  httpRetCode = CloudTask::httpDigestAuthAndGET(conf, entryPoint.c_str(), client, http);
+  std::shared_ptr<String> payload = (httpRetCode != HTTP_CODE_OK) ? std::make_shared<String>("") : std::make_shared<String>(http.getString());
+  http.end();
+  return payload;
+}
 
+bool CloudTask::decodeSendParams(const String& jsonString, SendParams& decodedSendParams) {
+  const int capacity = JSON_OBJECT_SIZE(5) + 150;
+  DynamicJsonBuffer jsonBuffer(capacity);
+  JsonObject& root = jsonBuffer.parseObject(jsonString);
+  bool ret = true;
+  if (!root.success()) {
+    return false;
+  }
+  decodedSendParams.status = root["status"]; 
+  
+  const char* last_ts = root["last-ts"];
+  if (last_ts != NULL) {
+    tmElements_t timeStruct;
+    ret = HttpDateParser::parseHTTPDate(String(last_ts), timeStruct);
+    if(ret) 
+      decodedSendParams.lastTS = TimeKeeper::tkMakeTime(timeStruct);
+  }
+  decodedSendParams.maxLines = root["maxlines"];
+  if (decodedSendParams.maxLines == 0) {
+    return false; 
+  }
+  const char* now = root["now"];
+  if (now == NULL) {
+    return false;
+  } else {
+    tmElements_t timeStruct;
+    ret = HttpDateParser::parseHTTPDate(String(now), timeStruct);
+    if(ret) 
+      decodedSendParams.now = TimeKeeper::tkMakeTime(timeStruct);
+    
+  }
+  decodedSendParams.errno = root["errno"];
+
+  return ret;
+}
+
+bool CloudTask::getEntryPointSendParams(CloudConf& conf, SendParams& sendParams, const String& entryPoint) {
+  int retCode;
+  int ret = false;
+  std::shared_ptr<String> payload = CloudTask::payloadGET(conf, entryPoint, retCode);
+  if (retCode != HTTP_CODE_OK) {
+    Serial.print(F("WARNING: Not HTTP_CODE_OK returned when calling payloadGET at getEntryPointSendParams: "));
+    Serial.println(retCode);
+  } else {
+    if(CloudTask::decodeSendParams(*payload, sendParams)) {
+      Serial.print(F("Successfuly decoded sendParams, maxlines is "));
+      Serial.println(sendParams.maxLines);
+      ret = true;
+    } else {
+      Serial.println(F("WARNING: Could not decode json of sendParams"));
+    }
+  }
+  return ret;  
+}
+
+bool CloudTask::getDatalogSendParams(CloudConf& conf, SendParams& sendParams) {
+   String datalogEntryPoint = String(FPSTR(DATALOG_SENDPARAMS_URL));
+   return CloudTask::getEntryPointSendParams(conf, sendParams, datalogEntryPoint);
+}
+
+bool CloudTask::getMsglogSendParams(CloudConf& conf, SendParams& sendParams) {
+   String msglogEntryPoint = String(FPSTR(MSGLOG_SENDPARAMS_URL));
+   return CloudTask::getEntryPointSendParams(conf, sendParams, msglogEntryPoint);
+}
+
+
+//Exemplo de quando pede send-params para datalog pela primeira vez: 
+// {"status":0,"last-ts":null,"maxlines":50,"now":"Sun, 12 May 2019 14:37:24 GMT"}
+// pegar strings como "const char*", null vai retornar null
 void CloudTask::loop()  {
   if (CloudTask::confAvailable) {
     if (ServerTask::initializationFinished()) {
@@ -168,19 +293,22 @@ void CloudTask::loop()  {
             bool readOk = readCloudConf(conf);
             if (readOk && conf.isAllValid() && conf.enabled != 0) {
               String datalogEntryPoint = String(FPSTR(DATALOG_SENDPARAMS_URL));
-              WiFiClient client;
-              HTTPClient http;
 
-              int retCode = CloudTask::httpDigestAuthAndGET(conf, datalogEntryPoint.c_str(), client, http);
-
-              if (retCode == HTTP_CODE_OK) {
-                String payload = http.getString();
-                Serial.println(payload);
-              } else {
-                Serial.print(F("Not HTTP_CODE_OK returned when calling httpDigestAuthAndGET: "));
+              int retCode;
+              std::shared_ptr<String> payload = CloudTask::payloadGET(conf, datalogEntryPoint, retCode);
+              if (retCode != HTTP_CODE_OK) {
+                Serial.print(F("WARNING: Not HTTP_CODE_OK returned when calling httpDigestAuthAndGET: "));
                 Serial.println(retCode);
+              } else {
+                SendParams sendParams;
+                if(CloudTask::decodeSendParams(*payload, sendParams)) {
+                  Serial.print(F("Successfuly decoded sendParams, maxlines is "));
+                  Serial.println(sendParams.maxLines);
+                } else {
+                  Serial.println(F("WARNING: Could not decode json of sendParams"));
+                }
               }
-              http.end();
+              Serial.println(*payload);
             } else {
               Serial.println(F("Could not read CloudConf or conf not enabled, will try again after interval"));
             } 

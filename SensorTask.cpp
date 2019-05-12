@@ -381,7 +381,7 @@ static const char MSGLOG_COMMON_NAME[] PROGMEM = "/logs/msg";
 static const char STR_FMT_STR[] PROGMEM = "%s";
 
 bool SensorTask::doFSMaintenance(int keepDays, const String& dirName, const String& commonName) {
-  time_t nowTime = this->timeKeeper.tkNow();
+  time_t nowTime = TimeKeeper::tkNow();
   Dir logDir = SPIFFS.openDir(dirName);
   tmElements_t timeElements;
   timeElements.Second = 59;
@@ -412,8 +412,8 @@ bool SensorTask::doFSMaintenance(int keepDays, const String& dirName, const Stri
       timeElements.Year = tmYear;
       timeElements.Month = tmMonth;
       timeElements.Day = tmDay;
-      time_t logFileTime = this->timeKeeper.tkMakeTime(timeElements);
-      int elapsedDays = (int) this->timeKeeper.tkElapsedDays(logFileTime, nowTime);
+      time_t logFileTime = TimeKeeper::tkMakeTime(timeElements);
+      int elapsedDays = (int) TimeKeeper::tkElapsedDays(logFileTime, nowTime);
       if (elapsedDays > keepDays) {
         allOk = allOk && SPIFFS.remove(fileName);
       }
@@ -427,23 +427,31 @@ bool SensorTask::doFSMaintenance(int keepDays) {
       && doFSMaintenance(keepDays, String(FPSTR(LOG_DIR)), String(FPSTR(MSGLOG_COMMON_NAME)));
 }
 
+File SensorTask::getLogFileWithDate(time_t theDate) {
+  return SensorTask::getFSFileWithDate(theDate, LOGF_FMT_STR, 33);
+}
+
+File SensorTask::getMsgFileWithDate(time_t theDate) {
+  return SensorTask::getFSFileWithDate(theDate, MSGF_FMT_STR, 33);
+}
+
 File SensorTask::getFSFileWithDate(time_t nowTime, PGM_P fmtStr, const int bufSize) {
   File logFile;
   if (fsOpen) {
     char logFName[bufSize];
     memset(logFName, '\0', bufSize*sizeof(char)); 
     
-    snprintf_P(logFName, bufSize, fmtStr, this->timeKeeper.tkYear(nowTime), this->timeKeeper.tkMonth(nowTime), this->timeKeeper.tkDay(nowTime));
+    snprintf_P(logFName, bufSize, fmtStr, TimeKeeper::tkYear(nowTime), TimeKeeper::tkMonth(nowTime), TimeKeeper::tkDay(nowTime));
 
     if(lastLogWrite == 0) {
-      if (this->timeKeeper.isValidTS(nowTime)) {
+      if (TimeKeeper::isValidTS(nowTime)) {
         doFSMaintenance(FS_LOG_KEEP_DAYS);
         logFile = SPIFFS.open(logFName, "a+");
       } else {
         logFile = SPIFFS.open(logFName, "w+");
       }
     } else {
-      if (this->timeKeeper.tkDay(nowTime) == this->timeKeeper.tkDay(lastLogWrite)) {
+      if (TimeKeeper::tkDay(nowTime) == TimeKeeper::tkDay(lastLogWrite)) {
         logFile = SPIFFS.open(logFName, "a+");
       } else {
         doFSMaintenance(FS_LOG_KEEP_DAYS);
