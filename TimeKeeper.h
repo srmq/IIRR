@@ -103,6 +103,11 @@ public:
     setTime(aHour, aMin, aSec, aDay, aMonth, aYear);
   }
 
+  static inline void tkSetTime(time_t aTime) {
+    setTime(aTime);
+  }
+
+
   static inline unsigned long tkElapsedDays(time_t from, time_t to) {
     return elapsedDays(to-from);
   }

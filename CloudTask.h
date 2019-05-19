@@ -35,13 +35,19 @@
 #define CLOUD_CHECK_SECS 240
 
 enum CloudTaskStatusCodes {
+  CLOUDTASK_OK = 0,
   CLOUDTASK_INVALID_CLOUDCONF = -200,
   CLOUDTASK_AUTHANDGET_1STBEGIN_ERR = -201,
   CLOUDTASK_AUTHANDGET_2NDBEGIN_ERR = -202,
   CLOUDTASK_AUTHANDGET_NOAUTHHEADER = -203,
   CLOUDTASK_AUTHANDPOST_1STBEGIN_ERR = -204,
   CLOUDTASK_AUTHANDPOST_NOAUTHHEADER = -205,
-  CLOUDTASK_AUTHANDPOST_2NDBEGIN_ERR = -206
+  CLOUDTASK_AUTHANDPOST_2NDBEGIN_ERR = -206,
+  CLOUDTASK_SYNCTOCLOUD_INVALIDMYUTCTIME = -207,
+  CLOUDTASK_SYNCTOCLOUD_NOTCONNECTED = -208,
+  CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_DATALOGPARAMS = -209,
+  CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_MSGLOGPARAMS = -210,
+  CLOUDTASK_SYNCTOCLOUD_FSNOTOPEN = -211
 };
 
 class SendParams {
@@ -117,6 +123,7 @@ public:
 
     static bool getDatalogSendParams(CloudConf& conf, SendParams& sendParams);
     static bool getMsglogSendParams(CloudConf& conf, SendParams& sendParams); 
+    static bool getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastTSLog, time_t lastTSMsg);
 
 protected:
     void loop();
@@ -126,10 +133,11 @@ private:
     time_t lastCheck;
     static bool confAvailable;
 
-    time_t lastTSDataSent;
-    time_t lastTSMsgSent;
+    //time_t lastTSDataSent;
+    //time_t lastTSMsgSent;
 
     static bool getEntryPointSendParams(CloudConf& conf, SendParams& sendParams, const String& entryPoint);
+    int syncToCloud(CloudConf& conf);
     
 };
 

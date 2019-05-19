@@ -55,6 +55,38 @@ void sortResistances() {
   }
 }
 
+static const char LOGF_NAME_PREFIX[] PROGMEM = "/logs/sensor"; 
+static const char MSGF_NAME_PREFIX[] PROGMEM = "/logs/msg";
+static const char YMD_DATE_FMT[] PROGMEM = "%04d%02d%02d";
+
+
+bool SensorTask::isLogFileName(const String& str) {
+  String logPrefix = String(FPSTR(LOGF_NAME_PREFIX));
+  return str.startsWith(logPrefix);
+}
+
+bool SensorTask::isMsgFileName(const String& str) {
+  String msgPrefix = String(FPSTR(MSGF_NAME_PREFIX));
+  return str.startsWith(msgPrefix);
+}
+
+bool SensorTask::getLogfileDMY(const String& logStr, int& day, int& month, int&year) {
+  String logPrefix = String(FPSTR(LOGF_NAME_PREFIX));
+  String strDate = logStr.substring(logPrefix.length(), logStr.indexOf('.'));
+  
+  String dateFmt = String(FPSTR(YMD_DATE_FMT));
+  return (sscanf(strDate.c_str(), dateFmt.c_str(), &year, &month, &day) == 3);
+}
+
+bool SensorTask::getMsgfileDMY(const String& msgStr, int& day, int& month, int&year) {
+  String msgPrefix = String(FPSTR(MSGF_NAME_PREFIX));
+  String strDate = msgStr.substring(msgPrefix.length(), msgStr.indexOf('.'));
+  
+  String dateFmt = String(FPSTR(YMD_DATE_FMT));
+  return (sscanf(strDate.c_str(), dateFmt.c_str(), &year, &month, &day) == 3);
+}
+
+
 time_t SensorTask::toConfTimet(time_t aTime_t) {
   char timeStr[5];
   timeStr[4] = '\0';
@@ -374,6 +406,7 @@ float SensorTask::readMoisture(SensorType sType) {
 static const char TS_FMT_STR[] PROGMEM = "%04d%02d%02dT%02d%02d%02d"; //yyyymmddThhmmss
 static const char LOGF_FMT_STR[] PROGMEM = "/logs/sensor%04d%02d%02d.txt"; //yyyymmdd
 static const char MSGF_FMT_STR[] PROGMEM = "/logs/msg%04d%02d%02d.txt"; //yyyymmdd
+
 
 const char LOG_DIR[] PROGMEM = "/logs";
 static const char SENSORLOG_COMMON_NAME[] PROGMEM = "/logs/sensor";

@@ -126,8 +126,10 @@ public:
     static void resetLearnFlowStatus();
     static File getLogFileWithDate(time_t theDate);
     static File getMsgFileWithDate(time_t theDate);
-
-
+    static bool isLogFileName(const String& str);
+    static bool isMsgFileName(const String& str);
+    static bool getLogfileDMY(const String& logStr, int& day, int& month, int&year);
+    static bool getMsgfileDMY(const String& msgStr, int& day, int& month, int&year);
 };
 
 

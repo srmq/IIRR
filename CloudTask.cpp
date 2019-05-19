@@ -21,9 +21,12 @@
 #include "LineLimitedReadStream.h"
 #include "HttpDateParser.h"
 #include "FS.h"
+#include "SensorTask.h"
 #include <pgmspace.h>
 #include <Arduino.h>
 #include <cstring>
+#include <cstdlib>
+#include <cctype>
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
@@ -38,6 +41,9 @@ static const char MSGLOG_SENDPARAMS_URL[] PROGMEM = "/v100/msglog/send-params";
 static const char AUTH_HEADER[] PROGMEM = "WWW-Authenticate";
 
 bool CloudTask::confAvailable = false;
+
+static const char FILEDATE_FMT_STR[] PROGMEM = "%04d%02d%02d"; //yyyymmdd
+
 
 CloudConf::CloudConf() {
   memset(this->baseUrl, 0, sizeof(this->baseUrl));
@@ -54,8 +60,8 @@ CloudTask::CloudTask() : Task(), firstRun(true), lastCheck(TimeKeeper::tkNow()) 
           CloudTask::confAvailable = true;
     }
   }
-  this->lastTSDataSent = TimeKeeper::firstValidTime();
-  this->lastTSMsgSent = this->lastTSDataSent;
+  //this->lastTSDataSent = TimeKeeper::firstValidTime();
+  //this->lastTSMsgSent = this->lastTSDataSent;
 }
 
 static String exractParam(String& authReq, const String& param, const char delimit) {
@@ -109,8 +115,119 @@ static String getDigestAuth(String& authReq, const String& username, const Strin
   String authorization = "Digest username=\"" + username + "\", realm=\"" + realm + "\", nonce=\"" + nonce +
                          "\", uri=\"" + uri + "\", algorithm=\"MD5\", qop=auth, nc=" + String(nc) + ", cnonce=\"" + cNonce + "\", response=\"" + response + "\"";
   Serial.println(authorization);
-
   return authorization;
+}
+
+static String getFirstDigitSubstr(const String& str) {
+  int digitStartAt = -1;
+  for (int i = 0;  i < str.length(); i++) {
+    if (isdigit(str.charAt(i))) {
+      digitStartAt = i;
+      break; 
+    }
+  }
+  if(digitStartAt == -1) return String("");
+  int subEnd = digitStartAt + 1;
+  while (subEnd < str.length()) {
+    if (isdigit(str.charAt(subEnd))) {
+      subEnd++;  
+    } else {
+      break;
+    }
+  }
+  return str.substring(digitStartAt, subEnd);
+}
+
+bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastTSLog, time_t lastTSMsg) {
+  tmElements_t outTm;
+  TimeKeeper::tkBreakTime(lastTSLog, outTm);
+  outTm.Second = 0;
+  outTm.Minute = 0;
+  outTm.Hour = 0;
+  lastTSLog = TimeKeeper::tkMakeTime(outTm);
+
+  TimeKeeper::tkBreakTime(lastTSMsg, outTm);
+  outTm.Second = 0;
+  outTm.Minute = 0;
+  outTm.Hour = 0;
+  lastTSMsg = TimeKeeper::tkMakeTime(outTm);
+  if(!fsOpen) return false;
+  
+
+  String logDirStr = String(FPSTR(LOG_DIR));
+  Dir logDir = SPIFFS.openDir(logDirStr);
+  time_t initDateLog = 0;
+  time_t initMsgLog = 0;
+
+  while(logDir.next()) {
+    String fileName = logDir.fileName();
+    if (SensorTask::isLogFileName(fileName)) {
+      int year, month, day;
+      if(SensorTask::getLogfileDMY(fileName, day, month, year)) {
+        outTm.Day = day;
+        outTm.Month = month;
+        outTm.Year = (year - 1970);
+        outTm.Second = 0;
+        outTm.Minute = 0;
+        outTm.Hour = 0;
+        time_t logFileTS = TimeKeeper::tkMakeTime(outTm);
+        if (logFileTS >= lastTSLog) {
+          if (initDateLog == 0) {
+            initDateLog = logFileTS;  
+          } else if(logFileTS < initDateLog) {
+            initDateLog = logFileTS; 
+          }
+        }
+      }
+    } else if (SensorTask::isMsgFileName(fileName)) {
+      int year, month, day;
+      if(SensorTask::getMsgfileDMY(fileName, day, month, year)) {
+        outTm.Day = day;
+        outTm.Month = month;
+        outTm.Year = (year - 1970);
+        outTm.Second = 0;
+        outTm.Minute = 0;
+        outTm.Hour = 0;
+        time_t msgFileTS = TimeKeeper::tkMakeTime(outTm);
+        if (msgFileTS >= lastTSMsg) {
+          if (initMsgLog == 0) {
+            initMsgLog = msgFileTS;  
+          } else if(msgFileTS < initMsgLog) {
+            initMsgLog = msgFileTS; 
+          }
+        }
+      }      
+    }
+  }
+  logDate = initDateLog;
+  msgDate = initMsgLog;
+  return true;
+}
+
+int CloudTask::syncToCloud(CloudConf& conf) {
+  if (!TimeKeeper::isValidTS(TimeKeeper::tkNow())) {
+    return CLOUDTASK_SYNCTOCLOUD_INVALIDMYUTCTIME;
+  }
+  if(WiFi.status() != WL_CONNECTED) {
+    return CLOUDTASK_SYNCTOCLOUD_NOTCONNECTED;
+  }
+  SendParams datalogSendParams;
+  SendParams msglogSendParams;
+  if(!CloudTask::getDatalogSendParams(conf, datalogSendParams)) {
+    return CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_DATALOGPARAMS;
+  }
+  yield();
+  if (!CloudTask::getMsglogSendParams(conf, msglogSendParams)) {
+    return CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_MSGLOGPARAMS;
+  }
+  yield();
+  if (!fsOpen) {
+    return CLOUDTASK_SYNCTOCLOUD_FSNOTOPEN;    
+  }
+
+  
+  //FIXME continue ver questao de comparar data e ajustar se estiver muito atrasado tambem
+  return CLOUDTASK_OK;
 }
 
 int CloudTask::httpDigestAuthAndCSVPOST(time_t onlyAfter, int maxLines, Stream& csvStream, DynamicJsonBuffer& returnObject,
