@@ -369,9 +369,9 @@ float SensorTask::readMoisture(SensorType sType) {
       refVoltage = readReferenceVoltage(sType, currSensorDirection);
       afterSensorVoltage = readAfterSensorVoltage(sType, currSensorDirection);
       #ifdef DEBUG_SENSOR_MODE
-        Serial.print("Reference read was: ");
+        Serial.print(F("Reference read was: "));
         Serial.println(refVoltage);
-        Serial.print("After sensor voltage was: ");
+        Serial.print(F("After sensor voltage was: "));
         Serial.println(afterSensorVoltage);
       #endif
       if (afterSensorVoltage < MINAFTERVOLTAGE_OPENCIRCUIT) {
@@ -381,7 +381,7 @@ float SensorTask::readMoisture(SensorType sType) {
       } else {
         resistances[i] = long( double(REFERENCE_RESISTOR) * ( refVoltage - afterSensorVoltage ) / afterSensorVoltage + 0.5 );
         #ifdef DEBUG_SENSOR_MODE
-          Serial.print("Resistance: ");
+          Serial.print(F("Resistance: "));
           Serial.println(resistances[i]);
         #endif 
         switchSensorDirection();
@@ -403,7 +403,7 @@ float SensorTask::readMoisture(SensorType sType) {
 
 
 
-static const char TS_FMT_STR[] PROGMEM = "%04d%02d%02dT%02d%02d%02d"; //yyyymmddThhmmss
+const char TS_FMT_STR[] PROGMEM = "%04d%02d%02dT%02d%02d%02d"; //yyyymmddThhmmss
 static const char LOGF_FMT_STR[] PROGMEM = "/logs/sensor%04d%02d%02d.txt"; //yyyymmdd
 static const char MSGF_FMT_STR[] PROGMEM = "/logs/msg%04d%02d%02d.txt"; //yyyymmdd
 
@@ -466,6 +466,29 @@ File SensorTask::getLogFileWithDate(time_t theDate) {
 
 File SensorTask::getMsgFileWithDate(time_t theDate) {
   return SensorTask::getFSFileWithDate(theDate, MSGF_FMT_STR, 33);
+}
+
+File SensorTask::getMsgFileWithDateForRead(time_t theDate) {
+  return SensorTask::getFSFileWithDateForRead(theDate, MSGF_FMT_STR, 33);
+}
+
+File SensorTask::getLogFileWithDateForRead(time_t theDate) {
+  return SensorTask::getFSFileWithDateForRead(theDate, LOGF_FMT_STR, 33);
+}
+
+
+File SensorTask::getFSFileWithDateForRead(time_t aTime, PGM_P fmtStr, const int bufSize) {
+  File logFile;
+  if (fsOpen) {
+    char logFName[bufSize];
+    memset(logFName, '\0', bufSize*sizeof(char)); 
+    
+    snprintf_P(logFName, bufSize, fmtStr, TimeKeeper::tkYear(aTime), TimeKeeper::tkMonth(aTime), TimeKeeper::tkDay(aTime));
+    logFile = SPIFFS.open(logFName, "r");
+
+  }
+  return logFile; //test if this returned object is true, if false no valid file
+                  //has been returned    
 }
 
 File SensorTask::getFSFileWithDate(time_t nowTime, PGM_P fmtStr, const int bufSize) {
@@ -556,13 +579,13 @@ void SensorTask::loopSensorMode() {
   } else {
     //is not irrigating at this moment
     const WaterCurrSensorStatus  currWaterStatus = this->waterControl.currStatus();
-    if (currWaterStatus != WATER_CURREMPTY) Serial.println("OK currWaterStatus != WATER_CURREMPTY"); else Serial.println("ERR currWaterStatus = WATER_CURREMPTY");
-    if (currWaterStatus != WATER_CURRNOCONF) Serial.println("OK currWaterStatus != WATER_CURRNOCONF"); else Serial.println("ERR currWaterStatus = WATER_CURRNOCONF");
-    if (!(TimeKeeper::isValidTS(nowTime) && isInNoIrrigTime(nowTime))) Serial.println("OK nowTime TS"); else Serial.println("ERR nowTime TS");
-    if (irrigTodayRemainingSecs() >= 0.2*mainConfParams.irrSlotSeconds) Serial.println("OK irrigTodayRemainingSecs"); else Serial.println("ERR irrigTodayRemainingSecs");
-    if (fulfillMinIrrigInterval(nowTime)) Serial.println("OK nowTime fulfillMinIrrigationInterval"); else Serial.println("ERR fulfillMinIrrigationInterval");
-    if (moistures.surface <= mainConfParams.critLevel || moistures.middle <= mainConfParams.critLevel) Serial.println("OK surface or Middle <= Crit"); else Serial.println("ERR surface or Middle <= Crit");
-    if (moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel) Serial.println("OK moistures < satLevel"); else Serial.println("ERR moistures < satLevel");
+    if (currWaterStatus != WATER_CURREMPTY) Serial.println(F("OK currWaterStatus != WATER_CURREMPTY")); else Serial.println(F("ERR currWaterStatus = WATER_CURREMPTY"));
+    if (currWaterStatus != WATER_CURRNOCONF) Serial.println(F("OK currWaterStatus != WATER_CURRNOCONF")); else Serial.println(F("ERR currWaterStatus = WATER_CURRNOCONF"));
+    if (!(TimeKeeper::isValidTS(nowTime) && isInNoIrrigTime(nowTime))) Serial.println(F("OK nowTime TS")); else Serial.println(F("ERR nowTime TS"));
+    if (irrigTodayRemainingSecs() >= 0.2*mainConfParams.irrSlotSeconds) Serial.println(F("OK irrigTodayRemainingSecs")); else Serial.println(F("ERR irrigTodayRemainingSecs"));
+    if (fulfillMinIrrigInterval(nowTime)) Serial.println(F("OK nowTime fulfillMinIrrigationInterval")); else Serial.println(F("ERR fulfillMinIrrigationInterval"));
+    if (moistures.surface <= mainConfParams.critLevel || moistures.middle <= mainConfParams.critLevel) Serial.println(F("OK surface or Middle <= Crit")); else Serial.println(F("ERR surface or Middle <= Crit"));
+    if (moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel) Serial.println(F("OK moistures < satLevel")); else Serial.println(F("ERR moistures < satLevel"));
     if ( nowTime > MIN_IRRIG_TS && !(TimeKeeper::isValidTS(nowTime) && isInNoIrrigTime(nowTime)) &&
          (irrigTodayRemainingSecs() >= 0.2*mainConfParams.irrSlotSeconds) && //FIXME 0.2 should be conf parameter
          fulfillMinIrrigInterval(nowTime) && 
@@ -572,7 +595,7 @@ void SensorTask::loopSensorMode() {
          (moistures.surface < mainConfParams.satLevel && moistures.middle < mainConfParams.satLevel)
         ) 
       { //fulffil irrigation criteria, turn on irrigation
-        Serial.println("I'm starting IRRIGATION");
+        Serial.println(F("I'm starting IRRIGATION"));
         startIrrigationAndLog(nowTime, moistures);
       }
   }

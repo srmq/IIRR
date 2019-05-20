@@ -57,6 +57,7 @@ extern SoilMoisture moistures;
 extern IrrigData irrigData;
 
 extern const char LOG_DIR[] PROGMEM;
+extern const char TS_FMT_STR[] PROGMEM; //yyyymmddThhmmss
 
 extern bool fsOpen;
 

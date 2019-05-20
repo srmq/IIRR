@@ -39,6 +39,8 @@ static const char CPARAMS_JSON_FILE[] PROGMEM = "/conf/cparams.json";
 static const char DATALOG_SENDPARAMS_URL[] PROGMEM = "/v100/datalog/send-params";
 static const char MSGLOG_SENDPARAMS_URL[] PROGMEM = "/v100/msglog/send-params";
 static const char AUTH_HEADER[] PROGMEM = "WWW-Authenticate";
+static const char DATALOG_SENDCSV_URL[] PROGMEM = "/v100/datalog/send";
+static const char MSGLOG_SENDCSV_URL[] PROGMEM = "/v100/msglog/send"; 
 
 bool CloudTask::confAvailable = false;
 
@@ -53,7 +55,8 @@ CloudConf::CloudConf() {
   this->enabled = 0;
 }
 
-CloudTask::CloudTask() : Task(), firstRun(true), lastCheck(TimeKeeper::tkNow()) {
+CloudTask::CloudTask() : Task(), firstRun(true), lastCheck(TimeKeeper::tkNow()), 
+    sentAllDataLogUntilToday(false), sentAllMsgLogUntilToday(false) {
   String confFileName = String(FPSTR(CPARAMS_JSON_FILE));
   if (fsOpen) {
     if(SPIFFS.exists(confFileName)) {
@@ -138,19 +141,19 @@ static String getFirstDigitSubstr(const String& str) {
   return str.substring(digitStartAt, subEnd);
 }
 
-bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastTSLog, time_t lastTSMsg) {
+bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastRepTSLog, time_t lastRepTSMsg) {
   tmElements_t outTm;
-  TimeKeeper::tkBreakTime(lastTSLog, outTm);
+  TimeKeeper::tkBreakTime(lastRepTSLog, outTm);
   outTm.Second = 0;
   outTm.Minute = 0;
   outTm.Hour = 0;
-  lastTSLog = TimeKeeper::tkMakeTime(outTm);
+  time_t lastDateLog = TimeKeeper::tkMakeTime(outTm);
 
-  TimeKeeper::tkBreakTime(lastTSMsg, outTm);
+  TimeKeeper::tkBreakTime(lastRepTSMsg, outTm);
   outTm.Second = 0;
   outTm.Minute = 0;
   outTm.Hour = 0;
-  lastTSMsg = TimeKeeper::tkMakeTime(outTm);
+  time_t lastDateMsg = TimeKeeper::tkMakeTime(outTm);
   if(!fsOpen) return false;
   
 
@@ -159,7 +162,9 @@ bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastTSLo
   time_t initDateLog = 0;
   time_t initMsgLog = 0;
 
-  while(logDir.next()) {
+  bool finishedMsg = false;
+  bool finishedLog = false;
+  while(logDir.next() && !(finishedMsg && finishedLog)) {
     String fileName = logDir.fileName();
     if (SensorTask::isLogFileName(fileName)) {
       int year, month, day;
@@ -171,12 +176,15 @@ bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastTSLo
         outTm.Minute = 0;
         outTm.Hour = 0;
         time_t logFileTS = TimeKeeper::tkMakeTime(outTm);
-        if (logFileTS >= lastTSLog) {
+        if (logFileTS >= lastDateLog && TimeKeeper::isValidTS(logFileTS)) {
           if (initDateLog == 0) {
             initDateLog = logFileTS;  
           } else if(logFileTS < initDateLog) {
             initDateLog = logFileTS; 
           }
+        }
+        if ((initDateLog != 0) && (initDateLog == lastDateLog)) {
+          finishedLog = true;
         }
       }
     } else if (SensorTask::isMsgFileName(fileName)) {
@@ -189,12 +197,15 @@ bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastTSLo
         outTm.Minute = 0;
         outTm.Hour = 0;
         time_t msgFileTS = TimeKeeper::tkMakeTime(outTm);
-        if (msgFileTS >= lastTSMsg) {
+        if (msgFileTS >= lastDateMsg && TimeKeeper::isValidTS(msgFileTS)) {
           if (initMsgLog == 0) {
             initMsgLog = msgFileTS;  
           } else if(msgFileTS < initMsgLog) {
             initMsgLog = msgFileTS; 
           }
+        }
+        if ((initMsgLog != 0) && (initMsgLog == lastDateMsg)) {
+          finishedMsg = true; 
         }
       }      
     }
@@ -217,20 +228,112 @@ int CloudTask::syncToCloud(CloudConf& conf) {
     return CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_DATALOGPARAMS;
   }
   yield();
+  time_t newNow = TimeKeeper::tkNow();
   if (!CloudTask::getMsglogSendParams(conf, msglogSendParams)) {
     return CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_MSGLOGPARAMS;
+  }
+  newNow = TimeKeeper::tkNow() - newNow;
+  newNow = msglogSendParams.now + (int)(0.5*newNow);
+  if (TimeKeeper::isValidTS(msglogSendParams.now)) {
+    if (abs(newNow - TimeKeeper::tkNow()) > 120) {
+      TimeKeeper::tkSetTime(newNow);
+    }
   }
   yield();
   if (!fsOpen) {
     return CLOUDTASK_SYNCTOCLOUD_FSNOTOPEN;    
   }
-
+  time_t msgDate = 0;
+  time_t logDate = 0;
   
-  //FIXME continue ver questao de comparar data e ajustar se estiver muito atrasado tambem
+  if(!getDatesToOpen(msgDate, logDate, datalogSendParams.lastTS, msglogSendParams.lastTS)) {
+    return CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_DATESTOOPEN;
+  }
+
+  //first sending messages
+  //FIXME refactor into a new function to try to send from this date, this function returns in such a 
+  //way that nothing was found to send (if the case) then we keep increasing the date and trying again
+  if(TimeKeeper::isValidTS(msgDate)) {
+    File msgFile = SensorTask::getMsgFileWithDateForRead(msgDate);
+    if(msgFile) {
+      char line[81];
+      size_t pos;
+
+      bool foundToSend = false;
+      while(msgFile.available() > 0 && !foundToSend) {
+        pos = msgFile.position();
+        memset(line, '\0', sizeof(line));
+        msgFile.readBytesUntil('\n', line, 80);
+
+        int year, month, day, hour, min, secs;
+        String myFmt(" ");
+        {
+          String tsFmtStr = String(FPSTR(TS_FMT_STR));
+          myFmt = myFmt.concat(tsFmtStr);
+        }
+        if (sscanf(line, myFmt.c_str(), &year, &month, &day, &hour, &min, &secs) == 6) {
+          time_t ts = TimeKeeper::tkMakeTime(year, month, day, hour, min, secs);
+          if (ts > msglogSendParams.lastTS) {
+            msgFile.seek(pos, SeekSet);
+            foundToSend = true;
+          }
+        } else {
+          Serial.print(F("Read line with invalid TS at syncToCloud with filename: "));
+          Serial.println(msgFile.name());
+        }
+      }
+      if(foundToSend) {
+        String msgCSVEntryPoint = String(FPSTR(MSGLOG_SENDCSV_URL));
+        int httpCode;
+        std::shared_ptr<String> payLoadPtr = payloadPOST(conf, msglogSendParams.maxLines, msgFile, msgCSVEntryPoint, httpCode);
+        if (httpCode != HTTP_CODE_OK) {
+          Serial.print(F("WARNING: Not HTTP_CODE_OK returned when calling payloadPOST at syncToCloud: "));
+          Serial.println(httpCode);
+        } else {
+          //FIXME TODO decodificar JSON apontado por payLoadPtr 
+        }
+        
+      } else {
+        if (TimeKeeper::isSameDate(msgDate, TimeKeeper::tkNow())) {
+          this->sentAllMsgLogUntilToday = true;
+        } else {
+          bool foundFile = false;
+          bool finishedSearch = false;
+          time_t newDate = msgDate + SECS_PER_DAY;
+          do {            
+            if (newDate > TimeKeeper::tkNow()) {
+              finishedSearch = true;
+            } else {
+              File msgFile = SensorTask::getMsgFileWithDateForRead(newDate);
+              if (msgFile) {
+                foundFile = true;
+                msgFile.close(); //FIXME CHANGE FOR DO SOMETHING WITH TO SEND THE FILE  
+              } else {
+                newDate += SECS_PER_DAY;
+              }
+            }            
+          } while(!foundFile && !finishedSearch);
+        }
+      }
+      msgFile.close();      
+    }
+  }
+  
+  //FIXME continue
   return CLOUDTASK_OK;
 }
 
-int CloudTask::httpDigestAuthAndCSVPOST(time_t onlyAfter, int maxLines, Stream& csvStream, DynamicJsonBuffer& returnObject,
+std::shared_ptr<String> CloudTask::payloadPOST(CloudConf &conf, int maxLines, Stream& csvStream, const String& entryPoint, int& httpRetCode) {
+  WiFiClient client;
+  HTTPClient http;
+  httpRetCode = CloudTask::httpDigestAuthAndCSVPOST(maxLines, csvStream, conf, 
+                entryPoint.c_str(), client, http);
+  std::shared_ptr<String> payload = (httpRetCode != HTTP_CODE_OK) ? std::make_shared<String>("") : std::make_shared<String>(http.getString());
+  http.end();
+  return payload;
+}
+
+int CloudTask::httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream,
                 CloudConf& conf, const char* urlEntry, WiFiClient& client, HTTPClient& http) {
 
   if( !conf.isAllValid() ) {

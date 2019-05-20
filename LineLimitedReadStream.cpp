@@ -71,5 +71,5 @@ size_t LineLimitedReadStream::write(const uint8_t *buffer, size_t size) {
 }
 
 void LineLimitedReadStream::flush() {
-  this->internalStream.flush();
+  
 }

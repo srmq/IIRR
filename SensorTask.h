@@ -112,6 +112,7 @@ private:
 
   bool stopIrrigationAndLog(time_t aTime, enum StopIrrigReason);
   bool startIrrigationAndLog(time_t aTime, const SoilMoisture& moist);
+  static File getFSFileWithDateForRead(time_t aTime, PGM_P fmtStr, const int bufSize);
 
 protected:
     void loop();
@@ -130,6 +131,8 @@ public:
     static bool isMsgFileName(const String& str);
     static bool getLogfileDMY(const String& logStr, int& day, int& month, int&year);
     static bool getMsgfileDMY(const String& msgStr, int& day, int& month, int&year);
+    static File getMsgFileWithDateForRead(time_t theDate);
+    static File getLogFileWithDateForRead(time_t theDate);
 };
 
 

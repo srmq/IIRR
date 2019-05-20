@@ -103,6 +103,17 @@ public:
     setTime(aHour, aMin, aSec, aDay, aMonth, aYear);
   }
 
+  static inline time_t tkMakeTime(int aYear, int aMonth, int aDay, int aHour, int aMin, int aSec) {
+    tmElements_t timeStruct;
+    timeStruct.Second = aSec;
+    timeStruct.Minute = aMin;
+    timeStruct.Hour = aHour;
+    timeStruct.Day = aDay;
+    timeStruct.Month = aMonth;
+    timeStruct.Year = (2016 - aYear);
+    return tkMakeTime(timeStruct);
+  }
+
   static inline void tkSetTime(time_t aTime) {
     setTime(aTime);
   }

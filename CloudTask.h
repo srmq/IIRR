@@ -47,7 +47,8 @@ enum CloudTaskStatusCodes {
   CLOUDTASK_SYNCTOCLOUD_NOTCONNECTED = -208,
   CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_DATALOGPARAMS = -209,
   CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_MSGLOGPARAMS = -210,
-  CLOUDTASK_SYNCTOCLOUD_FSNOTOPEN = -211
+  CLOUDTASK_SYNCTOCLOUD_FSNOTOPEN = -211,
+  CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_DATESTOOPEN = -212
 };
 
 class SendParams {
@@ -115,8 +116,10 @@ public:
                 HTTPClient& http);
 
     static std::shared_ptr<String> payloadGET(CloudConf &conf, const String& entryPoint, int& httpRetCode);
+    static std::shared_ptr<String> payloadPOST(CloudConf &conf, int maxLines, Stream& csvStream, 
+        const String& entryPoint, int& httpRetCode);
 
-    static int httpDigestAuthAndCSVPOST(time_t onlyAfter, int maxLines, Stream& csvStream, DynamicJsonBuffer& returnObject,
+    static int httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream, 
                 CloudConf& conf, const char* urlEntry, WiFiClient& client, HTTPClient& http);
 
     static bool decodeSendParams(const String& jsonString, SendParams& decodedSendParams);
@@ -132,6 +135,8 @@ private:
     bool firstRun;
     time_t lastCheck;
     static bool confAvailable;
+    bool sentAllDataLogUntilToday;
+    bool sentAllMsgLogUntilToday;
 
     //time_t lastTSDataSent;
     //time_t lastTSMsgSent;
