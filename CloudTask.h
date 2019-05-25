@@ -48,7 +48,13 @@ enum CloudTaskStatusCodes {
   CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_DATALOGPARAMS = -209,
   CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_MSGLOGPARAMS = -210,
   CLOUDTASK_SYNCTOCLOUD_FSNOTOPEN = -211,
-  CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_DATESTOOPEN = -212
+  CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_DATESTOOPEN = -212,
+  CLOUDTASK_SENDMSGSFROMDATE_INVALIDTS = -213,
+  CLOUDTASK_SENDMSGSFROMDATE_NOFILEWITHDATE = -214,
+  CLOUDTASK_SENDDATALOGFROMDATE_NOTHINGTOSEND = -215,
+  CLOUDTASK_SENDDATALOGFROMDATE_NOFILEWITHDATE = -216,
+  CLOUDTASK_SENDDATALOGFROMDATE_INVALIDTS = -217,
+  CLOUDTASK_SENDMSGSFROMDATE_NOTHINGTOSEND = 1
 };
 
 class SendParams {
@@ -126,7 +132,7 @@ public:
 
     static bool getDatalogSendParams(CloudConf& conf, SendParams& sendParams);
     static bool getMsglogSendParams(CloudConf& conf, SendParams& sendParams); 
-    static bool getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastTSLog, time_t lastTSMsg);
+    static bool getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastTSLog, time_t lastTSMsg, bool checkLog = true, bool checkMsg = true);
 
 protected:
     void loop();
@@ -142,6 +148,8 @@ private:
     //time_t lastTSMsgSent;
 
     static bool getEntryPointSendParams(CloudConf& conf, SendParams& sendParams, const String& entryPoint);
+    static int sendMsgsFromDate(time_t msgDate, CloudConf& conf, SendParams &msglogSendParams, std::shared_ptr<String> &outPayLoadPtr, int &outHttpCode);
+    static int sendDataLogFromDate(time_t logDate, CloudConf& conf, SendParams &datalogSendParams, std::shared_ptr<String> &outPayLoadPtr, int &outHttpCode);
     int syncToCloud(CloudConf& conf);
     
 };

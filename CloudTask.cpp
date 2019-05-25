@@ -141,7 +141,7 @@ static String getFirstDigitSubstr(const String& str) {
   return str.substring(digitStartAt, subEnd);
 }
 
-bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastRepTSLog, time_t lastRepTSMsg) {
+bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastRepTSLog, time_t lastRepTSMsg, bool checkLog, bool checkMsg) {
   tmElements_t outTm;
   TimeKeeper::tkBreakTime(lastRepTSLog, outTm);
   outTm.Second = 0;
@@ -162,11 +162,11 @@ bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastRepT
   time_t initDateLog = 0;
   time_t initMsgLog = 0;
 
-  bool finishedMsg = false;
-  bool finishedLog = false;
+  bool finishedMsg = !checkMsg;
+  bool finishedLog = !checkLog;
   while(logDir.next() && !(finishedMsg && finishedLog)) {
     String fileName = logDir.fileName();
-    if (SensorTask::isLogFileName(fileName)) {
+    if (SensorTask::isLogFileName(fileName) && !finishedLog) {
       int year, month, day;
       if(SensorTask::getLogfileDMY(fileName, day, month, year)) {
         outTm.Day = day;
@@ -187,7 +187,7 @@ bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastRepT
           finishedLog = true;
         }
       }
-    } else if (SensorTask::isMsgFileName(fileName)) {
+    } else if (SensorTask::isMsgFileName(fileName) && !finishedMsg) {
       int year, month, day;
       if(SensorTask::getMsgfileDMY(fileName, day, month, year)) {
         outTm.Day = day;
@@ -213,6 +213,115 @@ bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastRepT
   logDate = initDateLog;
   msgDate = initMsgLog;
   return true;
+}
+
+int CloudTask::sendDataLogFromDate(time_t logDate, CloudConf& conf, SendParams &datalogSendParams, std::shared_ptr<String> &outPayLoadPtr, int &outHttpCode) {
+  if(TimeKeeper::isValidTS(logDate)) {
+    File logFile = SensorTask::getLogFileWithDateForRead(logDate);
+    if(logFile) {
+      char line[81];
+      size_t pos;
+
+      bool foundToSend = false;
+      while(logFile.available() > 0 && !foundToSend) {
+        pos = logFile.position();
+        memset(line, '\0', sizeof(line));
+        logFile.readBytesUntil('\n', line, 80);
+
+        int year, month, day, hour, min, secs;
+        String myFmt(" ");
+        {
+          String tsFmtStr = String(FPSTR(TS_FMT_STR));
+          myFmt = myFmt.concat(tsFmtStr);
+        }
+        if (sscanf(line, myFmt.c_str(), &year, &month, &day, &hour, &min, &secs) == 6) {
+          time_t ts = TimeKeeper::tkMakeTime(year, month, day, hour, min, secs);
+          if (ts > datalogSendParams.lastTS) {
+            logFile.seek(pos, SeekSet);
+            foundToSend = true;
+          }
+        } else {
+          Serial.print(F("Read line with invalid TS at sendDataLogFromDate with filename: "));
+          Serial.println(logFile.name());
+        }
+      }
+      if(foundToSend) {
+        String logCSVEntryPoint = String(FPSTR(DATALOG_SENDCSV_URL));
+        outPayLoadPtr = payloadPOST(conf, datalogSendParams.maxLines, logFile, logCSVEntryPoint, outHttpCode);
+        if (outHttpCode != HTTP_CODE_OK) {
+          Serial.print(F("WARNING: Not HTTP_CODE_OK returned when calling payloadPOST at sendDataLogFromDate: "));
+          Serial.println(outHttpCode);
+        } else {
+          //FIXME TODO decodificar JSON apontado por payLoadPtr 
+        }
+        
+      } else {
+        logFile.close();
+        return CLOUDTASK_SENDDATALOGFROMDATE_NOTHINGTOSEND;
+      }
+      logFile.close();      
+    } else {
+      return CLOUDTASK_SENDDATALOGFROMDATE_NOFILEWITHDATE;
+    }
+  } else {
+      return CLOUDTASK_SENDDATALOGFROMDATE_INVALIDTS;
+  }
+  return CLOUDTASK_OK;
+}
+
+
+int CloudTask::sendMsgsFromDate(time_t msgDate, CloudConf& conf, SendParams &msglogSendParams, std::shared_ptr<String> &outPayLoadPtr, int &outHttpCode) {
+  if(TimeKeeper::isValidTS(msgDate)) {
+    File msgFile = SensorTask::getMsgFileWithDateForRead(msgDate);
+    if(msgFile) {
+      char line[81];
+      size_t pos;
+
+      bool foundToSend = false;
+      while(msgFile.available() > 0 && !foundToSend) {
+        pos = msgFile.position();
+        memset(line, '\0', sizeof(line));
+        msgFile.readBytesUntil('\n', line, 80);
+
+        int year, month, day, hour, min, secs;
+        String myFmt(" ");
+        {
+          String tsFmtStr = String(FPSTR(TS_FMT_STR));
+          myFmt = myFmt.concat(tsFmtStr);
+        }
+        if (sscanf(line, myFmt.c_str(), &year, &month, &day, &hour, &min, &secs) == 6) {
+          time_t ts = TimeKeeper::tkMakeTime(year, month, day, hour, min, secs);
+          if (ts > msglogSendParams.lastTS) {
+            msgFile.seek(pos, SeekSet);
+            foundToSend = true;
+          }
+        } else {
+          Serial.print(F("Read line with invalid TS at sendMsgsFromDate with filename: "));
+          Serial.println(msgFile.name());
+        }
+      }
+      if(foundToSend) {
+        String msgCSVEntryPoint = String(FPSTR(MSGLOG_SENDCSV_URL));
+        outPayLoadPtr = payloadPOST(conf, msglogSendParams.maxLines, msgFile, msgCSVEntryPoint, outHttpCode);
+        if (outHttpCode != HTTP_CODE_OK) {
+          Serial.print(F("WARNING: Not HTTP_CODE_OK returned when calling payloadPOST at sendMsgsFromDate: "));
+          Serial.println(outHttpCode);
+        } else {
+          //FIXME TODO decodificar JSON apontado por payLoadPtr 
+        }
+        
+      } else {
+        msgFile.close();
+        return CLOUDTASK_SENDMSGSFROMDATE_NOTHINGTOSEND;
+      }
+      msgFile.close();      
+    } else {
+      return CLOUDTASK_SENDMSGSFROMDATE_NOFILEWITHDATE;
+    }
+  } else {
+      return CLOUDTASK_SENDMSGSFROMDATE_INVALIDTS;
+  }
+  return CLOUDTASK_OK;
 }
 
 int CloudTask::syncToCloud(CloudConf& conf) {
@@ -249,77 +358,36 @@ int CloudTask::syncToCloud(CloudConf& conf) {
   if(!getDatesToOpen(msgDate, logDate, datalogSendParams.lastTS, msglogSendParams.lastTS)) {
     return CLOUDTASK_SYNCTOCLOUD_UNABLE_GET_DATESTOOPEN;
   }
+  yield();
 
   //first sending messages
-  //FIXME refactor into a new function to try to send from this date, this function returns in such a 
-  //way that nothing was found to send (if the case) then we keep increasing the date and trying again
   if(TimeKeeper::isValidTS(msgDate)) {
-    File msgFile = SensorTask::getMsgFileWithDateForRead(msgDate);
-    if(msgFile) {
-      char line[81];
-      size_t pos;
-
-      bool foundToSend = false;
-      while(msgFile.available() > 0 && !foundToSend) {
-        pos = msgFile.position();
-        memset(line, '\0', sizeof(line));
-        msgFile.readBytesUntil('\n', line, 80);
-
-        int year, month, day, hour, min, secs;
-        String myFmt(" ");
-        {
-          String tsFmtStr = String(FPSTR(TS_FMT_STR));
-          myFmt = myFmt.concat(tsFmtStr);
-        }
-        if (sscanf(line, myFmt.c_str(), &year, &month, &day, &hour, &min, &secs) == 6) {
-          time_t ts = TimeKeeper::tkMakeTime(year, month, day, hour, min, secs);
-          if (ts > msglogSendParams.lastTS) {
-            msgFile.seek(pos, SeekSet);
-            foundToSend = true;
+    int httpCode;
+    std::shared_ptr<String> payLoad;
+    int retCode;
+    do {
+        retCode = CloudTask::sendMsgsFromDate(msgDate, conf, msglogSendParams, payLoad, httpCode);
+        yield();
+        if (retCode == CLOUDTASK_SENDMSGSFROMDATE_NOTHINGTOSEND) {
+          if (TimeKeeper::isSameDate(msgDate, TimeKeeper::tkNow())) {
+            this->sentAllMsgLogUntilToday = true;
+          } else {
+            bool gotNewMsgDate = CloudTask::getDatesToOpen(msgDate, logDate, 0, msgDate + SECS_PER_DAY, false, true);
+            if (!gotNewMsgDate) {
+              break;
+            }
           }
-        } else {
-          Serial.print(F("Read line with invalid TS at syncToCloud with filename: "));
-          Serial.println(msgFile.name());
-        }
       }
-      if(foundToSend) {
-        String msgCSVEntryPoint = String(FPSTR(MSGLOG_SENDCSV_URL));
-        int httpCode;
-        std::shared_ptr<String> payLoadPtr = payloadPOST(conf, msglogSendParams.maxLines, msgFile, msgCSVEntryPoint, httpCode);
-        if (httpCode != HTTP_CODE_OK) {
-          Serial.print(F("WARNING: Not HTTP_CODE_OK returned when calling payloadPOST at syncToCloud: "));
-          Serial.println(httpCode);
-        } else {
-          //FIXME TODO decodificar JSON apontado por payLoadPtr 
-        }
-        
-      } else {
-        if (TimeKeeper::isSameDate(msgDate, TimeKeeper::tkNow())) {
-          this->sentAllMsgLogUntilToday = true;
-        } else {
-          bool foundFile = false;
-          bool finishedSearch = false;
-          time_t newDate = msgDate + SECS_PER_DAY;
-          do {            
-            if (newDate > TimeKeeper::tkNow()) {
-              finishedSearch = true;
-            } else {
-              File msgFile = SensorTask::getMsgFileWithDateForRead(newDate);
-              if (msgFile) {
-                foundFile = true;
-                msgFile.close(); //FIXME CHANGE FOR DO SOMETHING WITH TO SEND THE FILE  
-              } else {
-                newDate += SECS_PER_DAY;
-              }
-            }            
-          } while(!foundFile && !finishedSearch);
-        }
-      }
-      msgFile.close();      
+    } while (retCode == CLOUDTASK_SENDMSGSFROMDATE_NOTHINGTOSEND && !TimeKeeper::isSameDate(msgDate, TimeKeeper::tkNow()) && msgDate <= TimeKeeper::tkNow());
+    if (retCode != CLOUDTASK_OK && retCode != CLOUDTASK_SENDMSGSFROMDATE_NOTHINGTOSEND) {
+      Serial.print(F("WARNING: unexpected retCode at syncToCloud when sending messages, was :"));
+      Serial.println(retCode);
     }
   }
+
+  //now sending log
+  //FIXME TODO
   
-  //FIXME continue
   return CLOUDTASK_OK;
 }
 
