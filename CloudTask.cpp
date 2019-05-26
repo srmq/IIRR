@@ -371,6 +371,7 @@ int CloudTask::syncToCloud(CloudConf& conf) {
         if (retCode == CLOUDTASK_SENDMSGSFROMDATE_NOTHINGTOSEND) {
           if (TimeKeeper::isSameDate(msgDate, TimeKeeper::tkNow())) {
             this->sentAllMsgLogUntilToday = true;
+            break;
           } else {
             bool gotNewMsgDate = CloudTask::getDatesToOpen(msgDate, logDate, 0, msgDate + SECS_PER_DAY, false, true);
             if (!gotNewMsgDate) {
@@ -378,15 +379,43 @@ int CloudTask::syncToCloud(CloudConf& conf) {
             }
           }
       }
-    } while (retCode == CLOUDTASK_SENDMSGSFROMDATE_NOTHINGTOSEND && !TimeKeeper::isSameDate(msgDate, TimeKeeper::tkNow()) && msgDate <= TimeKeeper::tkNow());
+    } while (retCode == CLOUDTASK_SENDMSGSFROMDATE_NOTHINGTOSEND && msgDate <= TimeKeeper::tkNow());
     if (retCode != CLOUDTASK_OK && retCode != CLOUDTASK_SENDMSGSFROMDATE_NOTHINGTOSEND) {
       Serial.print(F("WARNING: unexpected retCode at syncToCloud when sending messages, was :"));
       Serial.println(retCode);
     }
+  } else {
+      Serial.println(F("WARNING: getDatesToOpen() did not return a valid msgDate at CloudTask::syncToCloud()"));
   }
 
   //now sending log
-  //FIXME TODO
+  if(TimeKeeper::isValidTS(logDate)) {
+    int httpCode;
+    std::shared_ptr<String> payLoad;
+    int retCode;
+    do {
+      retCode = CloudTask::sendDataLogFromDate(logDate, conf, datalogSendParams, payLoad, httpCode);
+      yield();
+      if (retCode == CLOUDTASK_SENDDATALOGFROMDATE_NOTHINGTOSEND) {
+        if (TimeKeeper::isSameDate(logDate, TimeKeeper::tkNow())) {
+          this->sentAllDataLogUntilToday = true;
+          break;
+        } else {
+          bool gotNewLogDate = CloudTask::getDatesToOpen(msgDate, logDate, logDate + SECS_PER_DAY, 0 , true, false);
+          if (!gotNewLogDate) {
+            break;
+          }
+        }
+      }
+    } while (retCode == CLOUDTASK_SENDDATALOGFROMDATE_NOTHINGTOSEND && logDate <= TimeKeeper::tkNow());
+    if (retCode != CLOUDTASK_OK && retCode != CLOUDTASK_SENDDATALOGFROMDATE_NOTHINGTOSEND) {
+      Serial.print(F("WARNING: unexpected retCode at syncToCloud when sending datalog, was :"));
+      Serial.println(retCode);
+    }
+  } else {
+      Serial.println(F("WARNING: getDatesToOpen() did not return a valid logDate at CloudTask::syncToCloud()"));
+  }
+  
   
   return CLOUDTASK_OK;
 }
@@ -568,35 +597,27 @@ bool CloudTask::getMsglogSendParams(CloudConf& conf, SendParams& sendParams) {
 //Exemplo de quando pede send-params para datalog pela primeira vez: 
 // {"status":0,"last-ts":null,"maxlines":50,"now":"Sun, 12 May 2019 14:37:24 GMT"}
 // pegar strings como "const char*", null vai retornar null
+
+#define SMALL_INTERVAL (30 + (rand()%60))
+
 void CloudTask::loop()  {
   if (CloudTask::confAvailable) {
     if (ServerTask::initializationFinished()) {
       time_t nowTime = TimeKeeper::tkNow();
       const time_t diffTime = nowTime - lastCheck;
-      if (diffTime > CLOUD_CHECK_SECS || firstRun) { //should see if we are connected
+      const time_t interval = (!sentAllDataLogUntilToday || !sentAllMsgLogUntilToday) ? SMALL_INTERVAL : CLOUD_CHECK_SECS;
+      if (diffTime > interval || firstRun) { //should see if we are connected
           if(WiFi.status() == WL_CONNECTED) {
             Serial.println(F("Will try cloud loop"));
             
             CloudConf conf;
             bool readOk = readCloudConf(conf);
             if (readOk && conf.isAllValid() && conf.enabled != 0) {
-              String datalogEntryPoint = String(FPSTR(DATALOG_SENDPARAMS_URL));
-
-              int retCode;
-              std::shared_ptr<String> payload = CloudTask::payloadGET(conf, datalogEntryPoint, retCode);
-              if (retCode != HTTP_CODE_OK) {
-                Serial.print(F("WARNING: Not HTTP_CODE_OK returned when calling httpDigestAuthAndGET: "));
+              const int retCode = syncToCloud(conf);
+              if (retCode != CLOUDTASK_OK) {
+                Serial.print(F("WARNING: syncToCloud() returned error status code: "));
                 Serial.println(retCode);
-              } else {
-                SendParams sendParams;
-                if(CloudTask::decodeSendParams(*payload, sendParams)) {
-                  Serial.print(F("Successfuly decoded sendParams, maxlines is "));
-                  Serial.println(sendParams.maxLines);
-                } else {
-                  Serial.println(F("WARNING: Could not decode json of sendParams"));
-                }
               }
-              Serial.println(*payload);
             } else {
               Serial.println(F("Could not read CloudConf or conf not enabled, will try again after interval"));
             } 
@@ -605,7 +626,7 @@ void CloudTask::loop()  {
           lastCheck= nowTime;
           yield();
       } else {
-          this->delay((CLOUD_CHECK_SECS - diffTime)*1000);
+          this->delay(max(500l, (((!sentAllDataLogUntilToday || !sentAllMsgLogUntilToday) ? SMALL_INTERVAL : CLOUD_CHECK_SECS) - diffTime)*1000));
       }
     } else yield();
   } else {

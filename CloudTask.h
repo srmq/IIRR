@@ -32,7 +32,7 @@
 
 
 
-#define CLOUD_CHECK_SECS 240
+#define CLOUD_CHECK_SECS 360
 
 enum CloudTaskStatusCodes {
   CLOUDTASK_OK = 0,
