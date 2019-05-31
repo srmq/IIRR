@@ -417,9 +417,9 @@ bool SensorTask::doFSMaintenance(int keepDays, const String& dirName, const Stri
   time_t nowTime = TimeKeeper::tkNow();
   Dir logDir = SPIFFS.openDir(dirName);
   tmElements_t timeElements;
-  timeElements.Second = 59;
-  timeElements.Minute = 59;
-  timeElements.Hour = 23;
+  timeElements.Second = 0;
+  timeElements.Minute = 0;
+  timeElements.Hour = 0;
   timeElements.Wday = 0;
     // tm.Second  Seconds   0 to 59
     // tm.Minute  Minutes   0 to 59
@@ -446,8 +446,13 @@ bool SensorTask::doFSMaintenance(int keepDays, const String& dirName, const Stri
       timeElements.Month = tmMonth;
       timeElements.Day = tmDay;
       time_t logFileTime = TimeKeeper::tkMakeTime(timeElements);
-      int elapsedDays = (int) TimeKeeper::tkElapsedDays(logFileTime, nowTime);
-      if (elapsedDays > keepDays) {
+      time_t elapsedDays = (nowTime > logFileTime) ? ((nowTime - logFileTime)/(3600ul*24ul)) : 0;
+      Serial.print(F("Days elapsed: "));
+      Serial.print(elapsedDays);
+      Serial.println("");
+      if ((nowTime > logFileTime) && elapsedDays > keepDays) {
+        Serial.print(F("FS maintenance is deleting NOW file: "));
+        Serial.println(fileName);
         allOk = allOk && SPIFFS.remove(fileName);
       }
     }
@@ -502,16 +507,35 @@ File SensorTask::getFSFileWithDate(time_t nowTime, PGM_P fmtStr, const int bufSi
     if(lastLogWrite == 0) {
       if (TimeKeeper::isValidTS(nowTime)) {
         doFSMaintenance(FS_LOG_KEEP_DAYS);
+        Serial.print(F("Opening file: "));
+        Serial.print(logFName);
+        Serial.println(F(" for append"));
         logFile = SPIFFS.open(logFName, "a+");
       } else {
+        Serial.print(F("Opening file: "));
+        Serial.print(logFName);
+        Serial.println(F(" for overwrite"));       
         logFile = SPIFFS.open(logFName, "w+");
       }
     } else {
-      if (TimeKeeper::tkDay(nowTime) == TimeKeeper::tkDay(lastLogWrite)) {
-        logFile = SPIFFS.open(logFName, "a+");
-      } else {
+      if (TimeKeeper::tkDay(nowTime) != TimeKeeper::tkDay(lastLogWrite)) {
         doFSMaintenance(FS_LOG_KEEP_DAYS);
-        logFile = SPIFFS.open(logFName, "w+");
+        if (TimeKeeper::isValidTS(nowTime)) {
+          Serial.print(F("Opening file: "));
+          Serial.print(logFName);
+          Serial.println(F(" for append"));
+          logFile = SPIFFS.open(logFName, "a+");
+        } else {
+          Serial.print(F("Opening file: "));
+          Serial.print(logFName);
+          Serial.println(F(" for overwrite"));                 
+          logFile = SPIFFS.open(logFName, "w");
+        }
+      } else {
+        Serial.print(F("Opening file: "));
+        Serial.print(logFName);
+        Serial.println(F(" for append"));        
+        logFile = SPIFFS.open(logFName, "a+");
       }
     }
   }

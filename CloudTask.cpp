@@ -89,7 +89,7 @@ static String getCNonce(const int len) {
   return s;
 }
 
-static String getDigestAuth(String& authReq, const String& username, const String& password, const String& uri, unsigned int counter) {
+String CloudTask::getDigestAuth(String& authReq, const String& username, const String& password, const String& uri, unsigned int counter, const String& method) {
   // extracting required parameters for RFC 2069 simpler Digest
   String realm = exractParam(authReq, "realm=\"", '"');
   String nonce = exractParam(authReq, "nonce=\"", '"');
@@ -106,7 +106,7 @@ static String getDigestAuth(String& authReq, const String& username, const Strin
   String h1 = md5.toString();
 
   md5.begin();
-  md5.add(String("GET:") + uri);
+  md5.add(method + ":" + uri);
   md5.calculate();
   String h2 = md5.toString();
 
@@ -215,6 +215,8 @@ bool CloudTask::getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastRepT
   return true;
 }
 
+static const char SSCANF_TSFORMAT[] PROGMEM = "%4d%2d%2dT%2d%2d%2d%*s";
+
 int CloudTask::sendDataLogFromDate(time_t logDate, CloudConf& conf, SendParams &datalogSendParams, std::shared_ptr<String> &outPayLoadPtr, int &outHttpCode) {
   if(TimeKeeper::isValidTS(logDate)) {
     File logFile = SensorTask::getLogFileWithDateForRead(logDate);
@@ -229,24 +231,28 @@ int CloudTask::sendDataLogFromDate(time_t logDate, CloudConf& conf, SendParams &
         logFile.readBytesUntil('\n', line, 80);
 
         int year, month, day, hour, min, secs;
-        String myFmt(" ");
-        {
-          String tsFmtStr = String(FPSTR(TS_FMT_STR));
-          myFmt = myFmt.concat(tsFmtStr);
-        }
-        if (sscanf(line, myFmt.c_str(), &year, &month, &day, &hour, &min, &secs) == 6) {
+        String tsFmtStr = String(FPSTR(SSCANF_TSFORMAT));
+        if (sscanf(line, tsFmtStr.c_str(), &year, &month, &day, &hour, &min, &secs) == 6) {
+          Serial.println(F("logfile successfuly read"));
           time_t ts = TimeKeeper::tkMakeTime(year, month, day, hour, min, secs);
           if (ts > datalogSendParams.lastTS) {
             logFile.seek(pos, SeekSet);
             foundToSend = true;
+          } else {
+            Serial.print(F("log line: \""));
+            Serial.print(line);
+            Serial.println(F("\" was not after lastTS"));
           }
         } else {
           Serial.print(F("Read line with invalid TS at sendDataLogFromDate with filename: "));
           Serial.println(logFile.name());
+          Serial.println(F("Line was:"));
+          Serial.println(line);
         }
       }
       if(foundToSend) {
         String logCSVEntryPoint = String(FPSTR(DATALOG_SENDCSV_URL));
+        Serial.println(F("Found datalog do send, now calling payloadPOST"));
         outPayLoadPtr = payloadPOST(conf, datalogSendParams.maxLines, logFile, logCSVEntryPoint, outHttpCode);
         if (outHttpCode != HTTP_CODE_OK) {
           Serial.print(F("WARNING: Not HTTP_CODE_OK returned when calling payloadPOST at sendDataLogFromDate: "));
@@ -284,12 +290,8 @@ int CloudTask::sendMsgsFromDate(time_t msgDate, CloudConf& conf, SendParams &msg
         msgFile.readBytesUntil('\n', line, 80);
 
         int year, month, day, hour, min, secs;
-        String myFmt(" ");
-        {
-          String tsFmtStr = String(FPSTR(TS_FMT_STR));
-          myFmt = myFmt.concat(tsFmtStr);
-        }
-        if (sscanf(line, myFmt.c_str(), &year, &month, &day, &hour, &min, &secs) == 6) {
+        String tsFmtStr = String(FPSTR(SSCANF_TSFORMAT));
+        if (sscanf(line, tsFmtStr.c_str(), &year, &month, &day, &hour, &min, &secs) == 6) {
           time_t ts = TimeKeeper::tkMakeTime(year, month, day, hour, min, secs);
           if (ts > msglogSendParams.lastTS) {
             msgFile.seek(pos, SeekSet);
@@ -374,7 +376,7 @@ int CloudTask::syncToCloud(CloudConf& conf) {
             break;
           } else {
             bool gotNewMsgDate = CloudTask::getDatesToOpen(msgDate, logDate, 0, msgDate + SECS_PER_DAY, false, true);
-            if (!gotNewMsgDate) {
+            if (!gotNewMsgDate || !TimeKeeper::isValidTS(msgDate)) {
               break;
             }
           }
@@ -394,6 +396,7 @@ int CloudTask::syncToCloud(CloudConf& conf) {
     std::shared_ptr<String> payLoad;
     int retCode;
     do {
+      Serial.println(F("Now calling sendDataLogFromDate"));
       retCode = CloudTask::sendDataLogFromDate(logDate, conf, datalogSendParams, payLoad, httpCode);
       yield();
       if (retCode == CLOUDTASK_SENDDATALOGFROMDATE_NOTHINGTOSEND) {
@@ -402,7 +405,7 @@ int CloudTask::syncToCloud(CloudConf& conf) {
           break;
         } else {
           bool gotNewLogDate = CloudTask::getDatesToOpen(msgDate, logDate, logDate + SECS_PER_DAY, 0 , true, false);
-          if (!gotNewLogDate) {
+          if (!gotNewLogDate || !TimeKeeper::isValidTS(logDate)) {
             break;
           }
         }
@@ -454,16 +457,16 @@ int CloudTask::httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream,
   const char *keys[] = {authHeader.c_str()};
   http.collectHeaders(keys, 1);
   
-  int httpCode = http.POST("H");
-    Serial.println(F("PASSED 1st http.POST()"));
+  int httpCode = http.POST("");
   if (httpCode <= 0)
     return httpCode;
+  Serial.println(F("PASSED 1st http.POST()"));
 
   String authReq = http.header(authHeader.c_str());
   Serial.println(authReq);
   if (!(authReq.length() > 0)) 
     return CLOUDTASK_AUTHANDPOST_NOAUTHHEADER;
-  String authorization = getDigestAuth(authReq, String(conf.login), String(conf.pass), String(paramUrl), 1);
+  String authorization = getDigestAuth(authReq, String(conf.login), String(conf.pass), String(paramUrl), 1, "POST");
   http.end();
 
   if (!http.begin(client, paramUrl))
@@ -472,6 +475,7 @@ int CloudTask::httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream,
   http.addHeader("Authorization", authorization);
   http.addHeader("Content-Type", "text/csv");
   LineLimitedReadStream limitedStream(csvStream, maxLines);
+  Serial.print(F("[HTTP] will now try 2nd POST with auth info...\n"));
   httpCode = http.sendRequest("POST", (Stream *)&limitedStream, 0);
   return httpCode;  
 }

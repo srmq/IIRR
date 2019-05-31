@@ -150,6 +150,7 @@ private:
     static bool getEntryPointSendParams(CloudConf& conf, SendParams& sendParams, const String& entryPoint);
     static int sendMsgsFromDate(time_t msgDate, CloudConf& conf, SendParams &msglogSendParams, std::shared_ptr<String> &outPayLoadPtr, int &outHttpCode);
     static int sendDataLogFromDate(time_t logDate, CloudConf& conf, SendParams &datalogSendParams, std::shared_ptr<String> &outPayLoadPtr, int &outHttpCode);
+    static String getDigestAuth(String& authReq, const String& username, const String& password, const String& uri, unsigned int counter, const String& method = "GET");
     int syncToCloud(CloudConf& conf);
     
 };

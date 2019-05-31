@@ -110,7 +110,7 @@ public:
     timeStruct.Hour = aHour;
     timeStruct.Day = aDay;
     timeStruct.Month = aMonth;
-    timeStruct.Year = (2016 - aYear);
+    timeStruct.Year = aYear - 1970;
     return tkMakeTime(timeStruct);
   }
 
@@ -118,10 +118,6 @@ public:
     setTime(aTime);
   }
 
-
-  static inline unsigned long tkElapsedDays(time_t from, time_t to) {
-    return elapsedDays(to-from);
-  }
 
   static inline bool isSameDate(time_t tsA, time_t tsB)   {
     return (tkYear(tsA) == tkYear(tsB)) && (tkMonth(tsA) == tkMonth(tsB)) && (tkDay(tsA) == tkDay(tsB));
