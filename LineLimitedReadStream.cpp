@@ -26,10 +26,13 @@ LineLimitedReadStream::LineLimitedReadStream(Stream& internalStream,
 
 int LineLimitedReadStream::available() {
   if (linesRead >= maxLines) {
-    return -1;
+    return 0;
   }
   const int linesToGo = maxLines - linesRead;
-  return min(linesToGo, internalStream.available());
+  const int numAvailable = min(linesToGo, internalStream.available());
+  Serial.print(F("LineLimitedReadStream returning number of available bytes: "));
+  Serial.println(numAvailable);
+  return numAvailable;
 }
 
 int LineLimitedReadStream::read() {

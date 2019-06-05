@@ -29,6 +29,7 @@
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
+#include "MyHttpClient.h"
 
 
 
@@ -126,7 +127,7 @@ public:
         const String& entryPoint, int& httpRetCode);
 
     static int httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream, 
-                CloudConf& conf, const char* urlEntry, WiFiClient& client, HTTPClient& http);
+                CloudConf& conf, const char* urlEntry, WiFiClient& client, MyHttpClient& http);
 
     static bool decodeSendParams(const String& jsonString, SendParams& decodedSendParams);
 

@@ -32,6 +32,7 @@
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
+#include "MyHttpClient.h"
 
 
 static const char CPARAMS_JSON_FILE[] PROGMEM = "/conf/cparams.json";
@@ -425,7 +426,7 @@ int CloudTask::syncToCloud(CloudConf& conf) {
 
 std::shared_ptr<String> CloudTask::payloadPOST(CloudConf &conf, int maxLines, Stream& csvStream, const String& entryPoint, int& httpRetCode) {
   WiFiClient client;
-  HTTPClient http;
+  MyHttpClient http;
   httpRetCode = CloudTask::httpDigestAuthAndCSVPOST(maxLines, csvStream, conf, 
                 entryPoint.c_str(), client, http);
   std::shared_ptr<String> payload = (httpRetCode != HTTP_CODE_OK) ? std::make_shared<String>("") : std::make_shared<String>(http.getString());
@@ -434,7 +435,7 @@ std::shared_ptr<String> CloudTask::payloadPOST(CloudConf &conf, int maxLines, St
 }
 
 int CloudTask::httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream,
-                CloudConf& conf, const char* urlEntry, WiFiClient& client, HTTPClient& http) {
+                CloudConf& conf, const char* urlEntry, WiFiClient& client, MyHttpClient& http) {
 
   if( !conf.isAllValid() ) {
     return CLOUDTASK_INVALID_CLOUDCONF;        
@@ -456,7 +457,7 @@ int CloudTask::httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream,
   String authHeader = String(FPSTR(AUTH_HEADER));
   const char *keys[] = {authHeader.c_str()};
   http.collectHeaders(keys, 1);
-  
+  http.setReuse(true);
   int httpCode = http.POST("");
   if (httpCode <= 0)
     return httpCode;
@@ -468,7 +469,7 @@ int CloudTask::httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream,
     return CLOUDTASK_AUTHANDPOST_NOAUTHHEADER;
   String authorization = getDigestAuth(authReq, String(conf.login), String(conf.pass), String(paramUrl), 1, "POST");
   http.end();
-
+  
   if (!http.begin(client, paramUrl))
     return CLOUDTASK_AUTHANDPOST_2NDBEGIN_ERR;
 
@@ -477,6 +478,7 @@ int CloudTask::httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream,
   LineLimitedReadStream limitedStream(csvStream, maxLines);
   Serial.print(F("[HTTP] will now try 2nd POST with auth info...\n"));
   httpCode = http.sendRequest("POST", (Stream *)&limitedStream, 0);
+  client.flush();
   return httpCode;  
 }
 
