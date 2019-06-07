@@ -48,7 +48,7 @@ int MyHttpClient::sendRequest(const char * type, Stream * stream, size_t size) {
   if(!sendHeader(type)) {
       return returnError(HTTPC_ERROR_SEND_HEADER_FAILED);
   }
-  _client->setTimeout(30000);
+  //_client->setTimeout(30000);
   if(size > 0) {
     _client->write(*stream);
   } else {
@@ -57,7 +57,7 @@ int MyHttpClient::sendRequest(const char * type, Stream * stream, size_t size) {
     int bytesRead;
     do {
       memset(buf, 0, sizeof(buf));
-      bytesRead = stream->readBytesUntil('\n', buf, 80);
+      bytesRead = stream->readBytesUntil('\n', buf, sizeof(buf));
       if(bytesRead > 0) {
         snprintf((char *)linelen, 6, "%x\r\n", (bytesRead+1));
         _client->write(linelen, strlen((char*)linelen));

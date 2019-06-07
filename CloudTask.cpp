@@ -477,6 +477,7 @@ int CloudTask::httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream,
   http.addHeader("Content-Type", "text/csv");
   LineLimitedReadStream limitedStream(csvStream, maxLines);
   Serial.print(F("[HTTP] will now try 2nd POST with auth info...\n"));
+  http.setReuse(false);
   httpCode = http.sendRequest("POST", (Stream *)&limitedStream, 0);
   client.flush();
   return httpCode;  
@@ -503,6 +504,7 @@ int CloudTask::httpDigestAuthAndGET(CloudConf& conf, const char* urlEntry, WiFiC
   // start connection and send HTTP header
   String authHeader = String(FPSTR(AUTH_HEADER));
   const char *keys[] = {authHeader.c_str()};
+  http.setReuse(true);
   http.collectHeaders(keys, 1);
   
   int httpCode = http.GET();
@@ -521,6 +523,7 @@ int CloudTask::httpDigestAuthAndGET(CloudConf& conf, const char* urlEntry, WiFiC
     return CLOUDTASK_AUTHANDGET_2NDBEGIN_ERR;
 
   http.addHeader("Authorization", authorization);
+  http.setReuse(false);
   httpCode = http.GET();
   return httpCode;  
 }

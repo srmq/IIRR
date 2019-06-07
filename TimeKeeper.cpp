@@ -40,9 +40,10 @@ static bool tryHTTPUpdate(tmElements_t& timeStruct) {
   const size_t numberOfHeaders = 1;
   bool result = false;
   if (WiFi.status() == WL_CONNECTED) { //Check WiFi connection status
+    WiFiClient client;
     HTTPClient http;
     const String updateUrl = String(FPSTR(HTTPTIME_UPDATE_URL));
-    http.begin(updateUrl); 
+    http.begin(client, updateUrl); 
     http.collectHeaders(headerKeys, numberOfHeaders);
  
     int httpCode = http.GET();
