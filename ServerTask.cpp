@@ -69,6 +69,8 @@ static const char JSON_F_UPDATECLOUDCONFPARAMS[] PROGMEM = "/v100/updateCloudCon
 
 WiFiEventHandler disconnectedEventHandler;
 
+bool shouldReinitAP;
+
 void ServerTask::initializeAPMode() {
   uint8_t mac[6];
   char ssId[10] = { 0 };
@@ -89,12 +91,12 @@ void ServerTask::initializeAPMode() {
   IPAddress myIP = WiFi.softAPIP();
   Serial.print(F("Own AP IP address: "));
   Serial.println(myIP);
- 
+  shouldReinitAP = false;
 }
 
 
-void ServerTask::onWifiDisconnected(const WiFiEventStationModeDisconnected& event) {
-  ServerTask::initializeAPMode();
+void ICACHE_RAM_ATTR ServerTask::onWifiDisconnected(const WiFiEventStationModeDisconnected& event) {
+  shouldReinitAP = true;
 }
 
 void streamCSV(Stream &csvStream, size_t contentLength = CONTENT_LENGTH_UNKNOWN) {
@@ -512,6 +514,8 @@ ServerTask::ServerTask() : Task() {
 
   ServerTask::hasInitialized = false;
 
+  shouldReinitAP = false;
+
   /*
   if (WiFi.wifi_get_opmode() != WIFI_AP_STA) {
     WiFi.mode(WIFI_AP);
@@ -608,6 +612,9 @@ void ServerTask::loopServerMode() {
 
 void ServerTask::loop()  {
   loopServerMode();
+  if (shouldReinitAP) {
+    ServerTask::initializeAPMode();
+  }
   yield();
 }
 

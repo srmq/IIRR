@@ -904,10 +904,10 @@ void SensorTask::loop()  {
   unsigned long timeBeforeTest = millis();
   if (irrigData.isIrrigating) {
     while((millis() - timeBeforeTest) < SENSOR_READ_DELAY) {
-      //esperando 30 segundos para comecar a verificar status da agua
+      //esperando 60 segundos para comecar a verificar status da agua
       //verificando status da irrigacao
       const unsigned long irrigTimeSecs = TimeKeeper::tkNow() - irrigData.irrigSince;
-      if (irrigTimeSecs > 30) { //FIXME 30 should be conf param
+      if (irrigTimeSecs > 60) { //FIXME 60 should be conf param
         WaterCurrSensorStatus statusWater = this->waterControl.currStatus();
         if(statusWater != WATER_CURRFLOWING) {
           //something wrong, log it

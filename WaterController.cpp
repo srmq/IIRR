@@ -24,7 +24,7 @@
 
 static unsigned long pulseCount;
 
-static void handleInterrupt() {
+static void ICACHE_RAM_ATTR handleInterrupt() {
   pulseCount++;
 }
 
