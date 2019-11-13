@@ -376,7 +376,7 @@ int CloudTask::syncToCloud(CloudConf& conf) {
             this->sentAllMsgLogUntilToday = true;
             break;
           } else {
-            bool gotNewMsgDate = CloudTask::getDatesToOpen(msgDate, logDate, 0, msgDate + SECS_PER_DAY, false, true);
+            bool gotNewMsgDate = CloudTask::getDatesToOpen(msgDate, logDate, 0, msgDate + (3600ul*24ul), false, true);
             if (!gotNewMsgDate || !TimeKeeper::isValidTS(msgDate)) {
               break;
             }
@@ -405,7 +405,8 @@ int CloudTask::syncToCloud(CloudConf& conf) {
           this->sentAllDataLogUntilToday = true;
           break;
         } else {
-          bool gotNewLogDate = CloudTask::getDatesToOpen(msgDate, logDate, logDate + SECS_PER_DAY, 0 , true, false);
+          Serial.println(F("Nothing found to send, will try new date"));
+          bool gotNewLogDate = CloudTask::getDatesToOpen(msgDate, logDate, logDate + (3600ul*24ul), 0 , true, false);
           if (!gotNewLogDate || !TimeKeeper::isValidTS(logDate)) {
             break;
           }
