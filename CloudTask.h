@@ -135,6 +135,9 @@ public:
     static bool getMsglogSendParams(CloudConf& conf, SendParams& sendParams); 
     static bool getDatesToOpen(time_t &msgDate, time_t &logDate, time_t lastTSLog, time_t lastTSMsg, bool checkLog = true, bool checkMsg = true);
 
+    static bool cloudServiceIsReachable();
+    static bool isInternetConnected();
+
 protected:
     void loop();
 
@@ -153,6 +156,7 @@ private:
     static int sendDataLogFromDate(time_t logDate, CloudConf& conf, SendParams &datalogSendParams, std::shared_ptr<String> &outPayLoadPtr, int &outHttpCode);
     static String getDigestAuth(String& authReq, const String& username, const String& password, const String& uri, unsigned int counter, const String& method = "GET");
     int syncToCloud(CloudConf& conf);
+    static bool canGet204(String &url, String &userAgent);
     
 };
 

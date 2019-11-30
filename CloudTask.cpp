@@ -41,7 +41,14 @@ static const char DATALOG_SENDPARAMS_URL[] PROGMEM = "/v100/datalog/send-params"
 static const char MSGLOG_SENDPARAMS_URL[] PROGMEM = "/v100/msglog/send-params";
 static const char AUTH_HEADER[] PROGMEM = "WWW-Authenticate";
 static const char DATALOG_SENDCSV_URL[] PROGMEM = "/v100/datalog/send";
-static const char MSGLOG_SENDCSV_URL[] PROGMEM = "/v100/msglog/send"; 
+static const char MSGLOG_SENDCSV_URL[] PROGMEM = "/v100/msglog/send";
+static const char GEN204_URL[] PROGMEM = "/v100/generate_204"; 
+static const char TEST_CONN1_URL[] PROGMEM = "http://clients3.google.com/generate_204";
+static const char TEST_CONN2_URL[] PROGMEM = "http://g.cn/generate_204";
+static const char USER_AGENT_STR[] PROGMEM = "Android";
+
+
+
 
 bool CloudTask::confAvailable = false;
 
@@ -482,6 +489,83 @@ int CloudTask::httpDigestAuthAndCSVPOST(int maxLines, Stream& csvStream,
   httpCode = http.sendRequest("POST", (Stream *)&limitedStream, 0);
   client.flush();
   return httpCode;  
+}
+
+bool CloudTask::isInternetConnected() {
+  bool isConnected = false;
+  String userAgent = String(FPSTR(USER_AGENT_STR));
+  {
+    String url = String(FPSTR(TEST_CONN1_URL));
+    isConnected = CloudTask::canGet204(url, userAgent);
+  }
+  if (!isConnected) {
+    String url = String(FPSTR(TEST_CONN2_URL));
+    isConnected = CloudTask::canGet204(url, userAgent);
+  }
+  return isConnected;
+}
+
+
+bool CloudTask::canGet204(String &url, String &userAgent) {
+  WiFiClient client;
+  HTTPClient http;
+  http.setReuse(false);
+  Serial.print(F("canGet204 URL IS: "));
+  Serial.println(url);
+    
+  if (!http.begin(client, url)) {
+    Serial.print(F("[HTTP] could not reach 204 service. Error on http.begin().\n"));
+    return false;
+  }
+
+  http.addHeader("User-Agent", userAgent);
+  http.addHeader("Connection", "close");
+
+  const int httpCode = http.GET();
+  const int httpSize = http.getSize();
+
+  http.end();
+  bool isReachable = (httpCode == HTTP_CODE_NO_CONTENT) && (httpSize == 0);
+  if (!isReachable) {
+    Serial.print(F("[HTTP] could not reach gen204 service. Did not return 204 with Content-Length: 0.\n"));  
+  }
+  return isReachable;  
+}
+
+
+bool CloudTask::cloudServiceIsReachable() {
+  bool isReachable = false;
+  CloudConf conf;
+  bool readOk = readCloudConf(conf);
+  if (!readOk) { 
+    Serial.print(F("Could not read cloud conf file at CloudTask::cloudServiceIsReachable"));
+    return false; 
+  }
+  if (!conf.isAllValid()) {
+    Serial.print(F("Cloud conf file is not valid at CloudTask::cloudServiceIsReachable"));
+    return false;
+  }
+  if (!conf.enabled) {
+    Serial.print(F("Cloud access is disabled at conf file (CloudTask::cloudServiceIsReachable)"));
+    return false;
+  }
+  String gen204EntryPoint = String(FPSTR(GEN204_URL));
+  const short lenParamUrl = strlen(conf.baseUrl) + strlen(gen204EntryPoint.c_str())+2;
+  char paramUrl[lenParamUrl];
+  strcpy(paramUrl, conf.baseUrl);
+  if(paramUrl[strlen(paramUrl)-1] == '/') 
+    paramUrl[strlen(paramUrl)-1] = '\0';
+  strcat(paramUrl, gen204EntryPoint.c_str());
+  {
+    String urlString(paramUrl);
+    String ua("IIRR");
+    isReachable = CloudTask::canGet204(urlString, ua);
+  }
+      
+  if (!isReachable) {
+    Serial.print(F("[HTTP] could not reach our gen204 service. Did not return 204 with Content-Length: 0.\n"));  
+  }
+  return isReachable;
 }
 
 int CloudTask::httpDigestAuthAndGET(CloudConf& conf, const char* urlEntry, WiFiClient& client,

@@ -17,6 +17,7 @@
  */
 #include "WiFiTask.h"
 #include "FS.h"
+#include "CloudTask.h"
 #include <cstring>
 
 static const char WIFINETS_JSON_FILE[] PROGMEM = "/conf/wifinets.json";
@@ -36,6 +37,28 @@ void WiFiTask::loop()  {
 
               String fileName = String(FPSTR(WIFINETS_JSON_FILE));
               loopWiFis(fileName);
+          } else {
+            CloudConf conf;
+            bool readOk = CloudTask::readCloudConf(conf);
+            if (!readOk) { 
+              Serial.print(F("Could not read cloud conf file at WiFiTask::loop()"));
+            } else if (!conf.isAllValid()) {
+              Serial.print(F("Cloud conf file is not valid at WiFiTask::loop()"));
+            } else if (!conf.enabled) {
+              Serial.print(F("Cloud access is disabled at conf file (WiFiTask::loop())"));
+            } else {
+              //will check service availability
+              if(!CloudTask::cloudServiceIsReachable()) {
+                yield();
+                //our service is not available, see if we are connected to the internet
+                if(!CloudTask::isInternetConnected()) {
+                  yield();
+                  //reconnect to wifi to try again later
+                  String fileName = String(FPSTR(WIFINETS_JSON_FILE));
+                  loopWiFis(fileName);
+                }
+              }
+            }
           }
           lastCheck= nowTime;
       } else {
@@ -149,5 +172,3 @@ void WiFiTask::loopWiFis(String& fileName) {
       WiFi.scanDelete();
     }
 }
-
-
